@@ -1,0 +1,56 @@
+{
+  "memory": {
+    "n_vectors": 100000,
+    "dim": 768,
+    "fp32_mb": 293.0,
+    "binary_mb": 9.2,
+    "compression_ratio": 32.0
+  },
+  "ground_truth_qps": 1065.0,
+  "search": {
+    "binary_flat": {
+      "build_time_s": 0.11,
+      "search_time_s": 22.196,
+      "qps": 45.0,
+      "recall_at_k": 0.0626
+    },
+    "two_stage_rf10": {
+      "rerank_factor": 10,
+      "build_time_s": 0.15,
+      "search_time_s": 13.347,
+      "qps": 75.0,
+      "recall_at_k": 0.231
+    },
+    "two_stage_rf50": {
+      "rerank_factor": 50,
+      "build_time_s": 0.12,
+      "search_time_s": 14.216,
+      "qps": 70.0,
+      "recall_at_k": 0.4661
+    },
+    "two_stage_rf100": {
+      "rerank_factor": 100,
+      "build_time_s": 0.12,
+      "search_time_s": 14.344,
+      "qps": 70.0,
+      "recall_at_k": 0.5881
+    }
+  },
+  "streaming": {
+    "n_insert": 100000,
+    "insert_time_s": 0.51,
+    "insert_rate_per_s": 194886.0,
+    "n_delete": 10000,
+    "delete_time_s": 0.0,
+    "delete_rate_per_s": 6693750.0,
+    "search_qps_after_mutations": 33.0
+  },
+  "memory_decay": {
+    "n_memories": 100,
+    "mean_importance_initial": 0.553,
+    "mean_importance_after_7d_decay": 0.055,
+    "mean_importance_after_reinforce": 0.007,
+    "decay_rate": 0.1,
+    "reinforce_amount": 0.15
+  }
+}
