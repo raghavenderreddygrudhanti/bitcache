@@ -1,0 +1,39 @@
+{
+  "dataset": "cohere-wikipedia-768",
+  "n_vectors": 100000,
+  "n_queries": 1000,
+  "dim": 768,
+  "k": 10,
+  "memory_fp32_mb": 293.0,
+  "memory_binary_mb": 9.2,
+  "compression": 32.0,
+  "faiss_binary_flat": {
+    "recall": 0.0636,
+    "qps": 14341.0
+  },
+  "faiss_hnsw": {
+    "recall": 0.1009,
+    "qps": 4566.0,
+    "build_s": 23.8
+  },
+  "bitcache_flat": {
+    "recall": 0.0638,
+    "qps": 38.0,
+    "build_s": 0.12
+  },
+  "bitcache_twostage_rf10": {
+    "recall": 0.2319,
+    "qps": 73.0,
+    "build_s": 0.39
+  },
+  "bitcache_twostage_rf50": {
+    "recall": 0.4676,
+    "qps": 71.0,
+    "build_s": 0.12
+  },
+  "bitcache_twostage_rf100": {
+    "recall": 0.5808,
+    "qps": 69.0,
+    "build_s": 0.12
+  }
+}

@@ -3,7 +3,7 @@
 Hamming distance = number of differing bits between two binary vectors.
 Computed as: popcount(XOR(a, b)) summed across bytes.
 
-NumPy's operations on contiguous uint8 arrays use SIMD under the hood.
+Uses numpy unpackbits for fast bit counting on contiguous arrays.
 """
 
 import numpy as np
