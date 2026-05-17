@@ -1,0 +1,12 @@
+LICENSE
+pyproject.toml
+bitcache/__init__.py
+bitcache/index.py
+bitcache/quantize.py
+bitcache/search.py
+bitcache.egg-info/PKG-INFO
+bitcache.egg-info/SOURCES.txt
+bitcache.egg-info/dependency_links.txt
+bitcache.egg-info/requires.txt
+bitcache.egg-info/top_level.txt
+tests/test_bitcache.py

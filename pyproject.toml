@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bitcache"
+version = "0.1.0"
+description = "Binary vector retrieval engine for AI agent memory"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [{name = "Raghavender Reddy Grudhanti"}]
+keywords = ["vector-search", "binary-quantization", "ann", "popcount", "agent-memory", "rag"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = ["numpy>=1.24.0"]
+
+[project.optional-dependencies]
+dev = ["pytest", "faiss-cpu"]
+
+[project.urls]
+Homepage = "https://github.com/raghavenderreddygrudhanti/bitcache"
+Repository = "https://github.com/raghavenderreddygrudhanti/bitcache"
+
+[tool.setuptools.packages.find]
+include = ["bitcache*"]

@@ -1,0 +1,22 @@
+Metadata-Version: 2.4
+Name: bitcache
+Version: 0.1.0
+Summary: Binary vector retrieval engine for AI agent memory
+Author: Raghavender Reddy Grudhanti
+License: MIT
+Project-URL: Homepage, https://github.com/raghavenderreddygrudhanti/bitcache
+Project-URL: Repository, https://github.com/raghavenderreddygrudhanti/bitcache
+Keywords: vector-search,binary-quantization,ann,popcount,agent-memory,rag
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy>=1.24.0
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: faiss-cpu; extra == "dev"
+Dynamic: license-file
