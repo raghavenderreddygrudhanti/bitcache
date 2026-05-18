@@ -4,8 +4,4 @@ __pycache__/
 dist/
 build/
 .pytest_cache/
-paper.md
-ARCHITECTURE_ANALYSIS.md
-PROGRESS.md
-paper_final.md
 benchmarks/data/
