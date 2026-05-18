@@ -116,7 +116,7 @@ bitcache achieved higher recall than FAISS HNSW under the tested configuration (
 
 **Note:** The throughput gap (116 vs 86,000 QPS) reflects implementation language difference (Python vs C++), not architectural limitation. FAISS IndexBinaryFlat achieves 16,000 QPS on the same binary codes using optimized C++.
 
-### 5.2 Recall-Latency Tradeoff (50K synthetic, dim=768)
+### 5.3 Recall-Latency Tradeoff (50K synthetic, dim=768)
 
 | rf | Recall@10 | Avg Latency | p50 | p95 | QPS |
 |----|-----------|-------------|-----|-----|-----|
@@ -130,7 +130,7 @@ bitcache achieved higher recall than FAISS HNSW under the tested configuration (
 
 Latency is approximately constant from rf=10 to rf=100 (~8ms), indicating that Stage 1 (binary scan) dominates. Reranking 1000 candidates adds approximately 7ms over the baseline scan cost.
 
-### 5.3 Scale Experiments (synthetic, dim=768)
+### 5.4 Scale Experiments (synthetic, dim=768)
 
 | Size | rf=500 Recall | Latency | QPS |
 |------|---------------|---------|-----|
@@ -140,7 +140,7 @@ Latency is approximately constant from rf=10 to rf=100 (~8ms), indicating that S
 
 Latency scales linearly with corpus size (confirmed O(n)). At 500K, latency is 75ms — acceptable for background retrieval. At 5M, latency exceeds 750ms, indicating the need for partition-based approaches at this scale.
 
-### 5.4 Streaming Performance
+### 5.5 Streaming Performance
 
 | Operation | Throughput |
 |-----------|-----------|
@@ -176,6 +176,8 @@ This observation should not be generalized without further evaluation across div
 ## 7. Conclusion
 
 We presented a staged retrieval architecture that achieves 88.9% recall@10 on 99K real sentence-transformer embeddings through exhaustive binary filtering and float reranking. Under the tested configuration, this outperformed FAISS HNSW (88.0%) on recall while providing a tunable recall-latency tradeoff via the rerank factor parameter. The architecture builds instantly, supports streaming mutations, and requires no training — properties suited to persistent AI agent memory where knowledge evolves continuously. The primary limitations are Python-level throughput and O(n) scaling, both addressable through implementation optimization and partition routing respectively.
+
+Code and experiments: https://github.com/raghavenderreddygrudhanti/bitcache
 
 ---
 

@@ -127,7 +127,7 @@ Recall saturates at probe=4 (0.901) and does not improve with additional probes.
 
 On synthetic data with high cluster overlap, both routing methods fail — but float routing achieves 54% higher hit rate than binary routing. The failure is caused by the data distribution (200 overlapping clusters scattered across 128 partitions), not the routing mechanism.
 
-### 4.3 Partition Locality Analysis
+### 4.5 Partition Locality Analysis
 
 The contrast between real and synthetic results reveals a key property: **real semantic embeddings exhibit strong partition locality that synthetic clustered data does not.** Sentence-transformer embeddings form tight semantic clusters (sentences about similar topics) that align well with float k-means partitions. Synthetic Gaussian clusters with σ=0.3 at dim=768 produce significant inter-cluster overlap that defeats partition-based routing.
 
@@ -160,6 +160,8 @@ The partition locality observation is consistent with IVF-based methods (FAISS I
 ## 6. Conclusion
 
 We demonstrated that real sentence-transformer embeddings exhibit strong partition locality under float-space k-means clustering: 100% of true top-10 neighbors reside in 6.2% of partitions. This enables 3.8x latency reduction over exhaustive scan with no recall loss. Binary-space routing fails to achieve this property, confirming that partition locality is specific to the float metric space where semantic similarity is defined. The finding is validated on 99K real embeddings; confirmation at larger scale remains future work.
+
+Code and experiments: https://github.com/raghavenderreddygrudhanti/bitcache
 
 ---
 
