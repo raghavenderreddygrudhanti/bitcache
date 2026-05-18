@@ -5,3 +5,4 @@ dist/
 build/
 .pytest_cache/
 benchmarks/data/
+.DS_Store

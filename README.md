@@ -1,113 +1,143 @@
 # bitcache
 
-Staged binary retrieval for persistent AI agent memory.
+Staged semantic retrieval architecture for persistent AI agent memory.
 
-Achieves **88.9% recall@10** on 100K real sentence-transformer embeddings — outperforming FAISS HNSW (87.2%) — using exhaustive binary filtering with float reranking.
+![Architecture](papers/figures/paper3_architecture.png)
 
-## Results
+## Key Results
 
-**Real semantic embeddings (all-MiniLM-L6-v2, 99K vectors, 384 dimensions):**
+**Real sentence-transformer embeddings (99K vectors, all-MiniLM-L6-v2, 384d):**
 
-| Version | Recall@10 | Latency | Scanned | Speedup |
-|---------|-----------|---------|---------|---------|
-| Gen1 (exhaustive) | 0.896 | 8.6ms | 100% | 1x |
-| **Gen2 (partitioned)** | **0.898** | **1.3ms** | **6.2%** | **6.8x** |
+| Method | Recall@10 | Latency | Scan% | Speedup |
+|--------|-----------|---------|-------|---------|
+| Gen1 (exhaustive) | 0.891 | 8.6ms | 100% | 1x |
+| **Gen3 (float routed)** | **0.892** | **3.0ms** | **6.2%** | **3.8x** |
+| FAISS HNSW (M=32, ef=64) | 0.880 | 0.01ms | — | — |
+| FAISS Binary (no rerank) | 0.735 | — | — | — |
 
-Gen2 partition routing reduces scan volume by 94% with no recall loss.
+**Recall-vs-rf tradeoff (50K synthetic, 768d):**
 
-**Recall-vs-rf curve (50K synthetic, 768 dimensions):**
-
-| rf | Recall@10 | Latency | QPS |
-|----|-----------|---------|-----|
-| 10 | 30.3% | 7.8ms | 129 |
-| 100 | 68.7% | 8.2ms | 122 |
-| 500 | 93.5% | 10.1ms | 99 |
-| 1000 | 97.3% | 14.9ms | 67 |
+![Recall Curve](papers/figures/paper1_recall_vs_rf.png)
 
 ## Install
 
 ```bash
+git clone https://github.com/raghavenderreddygrudhanti/bitcache.git
+cd bitcache
 pip install -e .
 ```
 
-## Usage
+## Quick Start
 
 ```python
 import numpy as np
 from bitcache import TwoStageIndex
 
-# Create index
+# Staged retrieval (Gen1)
 index = TwoStageIndex(dim=384, rerank_factor=100)
-
-# Add vectors
 vectors = np.random.randn(10000, 384).astype(np.float32)
 index.add(vectors)
 
-# Search
-query = np.random.randn(384).astype(np.float32)
+query = vectors[0]
 scores, indices = index.search(query, k=10)
 ```
 
-## How it works
+```python
+from bitcache.float_routed import FloatRoutedIndex
 
-1. **Binary quantize**: Each float dimension → 1 bit (sign). 32x compression.
-2. **Exhaustive Hamming scan**: XOR + popcount against all binary codes. Selects top rf×k candidates.
-3. **Float rerank**: Precise inner product on candidates only. Returns top-k.
+# Partition-routed retrieval (Gen3)
+index = FloatRoutedIndex(dim=384, n_partitions=128, n_probe=8, rerank_factor=500)
+index.build(vectors)
 
-The rerank factor (rf) is the single control parameter. Higher rf → higher recall, slightly higher latency.
+scores, indices = index.search(query, k=10)
+```
+
+```python
+from bitcache import AgentMemory
+
+# Agent memory with decay and eviction
+mem = AgentMemory(dim=384, capacity=10000, decay_rate=0.1)
+mem.save_memory(vector, content="user prefers morning meetings", importance=0.8)
+results = mem.retrieve_memory(query_vector, k=5)
+```
+
+```python
+from bitcache import GraphMemory
+
+# Graph memory with entity relations
+gm = GraphMemory(dim=384)
+gm.add_entity("prod-db-01", vector, name="Production DB", entity_type="system")
+gm.add_entity("api-gateway", vector2, name="API Gateway", entity_type="system")
+gm.add_relation("api-gateway", "depends_on", "prod-db-01")
+
+results = gm.search(query_vector, k=3, expand=True, max_hops=2)
+```
 
 ## Architecture
 
 ```
-bitcache/
-├── quantize.py      # float → binary conversion
-├── search.py        # XOR + popcount Hamming distance
-├── index.py         # BinaryIndex (flat scan)
-├── two_stage.py     # TwoStageIndex (binary filter + float rerank)
-├── three_stage.py   # ThreeStageIndex (binary → 4-bit → float)
-├── partitioned.py   # PartitionedIndex (Gen2: partition routing)
-├── graph.py         # VamanaIndex (graph in binary space)
-├── streaming.py     # StreamingIndex (insert/update/delete)
-├── memory.py        # AgentMemory (importance, decay, eviction)
-└── graph_memory.py  # GraphMemory (entity-relation + multi-hop)
+Layer 6: GraphMemory        — entity-relation + multi-hop traversal
+Layer 5: AgentMemory        — importance, decay, reinforcement, eviction
+Layer 4: StreamingIndex     — insert/update/delete + metadata filter
+Layer 3: FloatRoutedIndex   — float-space partition routing (6.2% scan)
+Layer 2: TwoStageIndex      — binary filter + float rerank
+Layer 1: BinaryIndex        — sign-bit quantization (32x compression)
 ```
+
+Each layer is independently usable and composable.
 
 ## Benchmarks
 
 ```bash
-# Recall-vs-rf curve (50K synthetic, produces charts)
+# Recall-vs-rf curve (50K synthetic)
 python benchmarks/eval_rf_curve.py
-
-# Realistic clustered embeddings + FAISS baselines
-python benchmarks/eval_realistic.py
 
 # Scale test (50K → 500K → 5M)
 python benchmarks/eval_scale.py
 
-# 14-method comparison
+# 14-method comparison (FAISS, hnswlib, nmslib, USearch, Annoy, etc.)
 python benchmarks/eval_all_dbs.py
+
+# Realistic embeddings + FAISS baselines
+python benchmarks/eval_realistic.py
 ```
 
-Requirements for benchmarks: `pip install faiss-cpu sentence-transformers matplotlib`
+Dependencies for benchmarks:
+```bash
+pip install faiss-cpu sentence-transformers matplotlib scikit-learn hnswlib annoy
+```
 
-## Key findings
+## Tests
 
-1. **Binary scan dominates latency, not reranking.** Latency is flat from rf=10 to rf=100. Reranking 1000 candidates adds only 1ms.
-2. **Real semantic embeddings work better than synthetic.** Binary sign-bit quantization preserves semantic manifold structure.
-3. **Scale boundary: 500K vectors.** Beyond that, partitioning is needed for interactive latency.
-4. **Beats HNSW on recall.** Exhaustive scan never misses candidates that graph navigation can miss.
+```bash
+pytest tests/ -v
+# 75 tests passing
+```
 
-## Limitations
+## Key Findings
 
-- **Throughput**: 118 QPS (Python) vs 91K QPS (FAISS C++). Implementation, not architecture.
-- **O(n) scan**: Linear latency growth. Practical up to 500K for interactive use.
-- **Memory**: Full system stores binary + float. 32x compression applies to binary index only.
+1. **Binary scan dominates latency, not reranking.** Reranking 1000 candidates adds only 1ms over baseline scan cost.
+2. **Real semantic embeddings preserve neighborhoods under binary quantization.** 88.9% recall at rf=10 on sentence-transformer embeddings.
+3. **Float-space routing achieves 100% partition hit rate** on real embeddings. All true neighbors are in the probed partitions.
+4. **Scale boundary: 500K for exhaustive, ~3M for routed.** Beyond that, further partitioning is needed.
+5. **Recall ceiling (~89%) is from quantization noise**, not candidate coverage or routing. Higher-bit quantization is the next improvement.
+
+## Papers
+
+- [Paper 1: Tunable Staged Retrieval](papers/paper1_staged_retrieval.md) — Gen1 architecture
+- [Paper 2: Partition-Local Semantic Routing](papers/paper2_semantic_routing.md) — Gen3 routing
+- [Paper 3: Persistent Memory Architecture](papers/paper3_memory_systems.md) — Full system
+
+## Reproducibility
+
+See [papers/REPRODUCIBILITY.md](papers/REPRODUCIBILITY.md) for full instructions including dataset generation, benchmark commands, and hardware specifications.
 
 ## References
 
 - [QuIVer: Binary Quantization for ANN](https://arxiv.org/abs/2605.02171) (Xiao et al., 2026)
 - [FaTRQ: Tiered Residual Quantization](https://arxiv.org/abs/2601.09985) (Zhang et al., 2026)
 - [HippoRAG: Long-Term Memory for LLMs](https://arxiv.org/abs/2405.14831) (NeurIPS 2024)
+- [HNSW](https://arxiv.org/abs/1603.09320) (Malkov & Yashunin, 2020)
 - [FAISS](https://github.com/facebookresearch/faiss)
 
 ## License
