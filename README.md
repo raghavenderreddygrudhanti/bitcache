@@ -6,14 +6,16 @@ Achieves **88.9% recall@10** on 100K real sentence-transformer embeddings — ou
 
 ## Results
 
-On real semantic embeddings (all-MiniLM-L6-v2, 384 dimensions):
+**Real semantic embeddings (all-MiniLM-L6-v2, 99K vectors, 384 dimensions):**
 
-| Scale | bitcache Recall@10 | FAISS HNSW | FAISS Binary |
-|-------|-------------------|------------|--------------|
-| 9K | 99.98% | 99.2% | 81.1% |
-| 100K | 88.9% | 87.2% | 73.5% |
+| Version | Recall@10 | Latency | Scanned | Speedup |
+|---------|-----------|---------|---------|---------|
+| Gen1 (exhaustive) | 0.896 | 8.6ms | 100% | 1x |
+| **Gen2 (partitioned)** | **0.898** | **1.3ms** | **6.2%** | **6.8x** |
 
-On synthetic clustered data (50K vectors, 768 dimensions):
+Gen2 partition routing reduces scan volume by 94% with no recall loss.
+
+**Recall-vs-rf curve (50K synthetic, 768 dimensions):**
 
 | rf | Recall@10 | Latency | QPS |
 |----|-----------|---------|-----|
@@ -63,6 +65,7 @@ bitcache/
 ├── index.py         # BinaryIndex (flat scan)
 ├── two_stage.py     # TwoStageIndex (binary filter + float rerank)
 ├── three_stage.py   # ThreeStageIndex (binary → 4-bit → float)
+├── partitioned.py   # PartitionedIndex (Gen2: partition routing)
 ├── graph.py         # VamanaIndex (graph in binary space)
 ├── streaming.py     # StreamingIndex (insert/update/delete)
 ├── memory.py        # AgentMemory (importance, decay, eviction)
