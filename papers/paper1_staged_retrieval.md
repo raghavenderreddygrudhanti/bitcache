@@ -93,7 +93,17 @@ Each coordinate maps to one bit: b_i = 1 if x_i > 0, else 0. For d=384: 1536 byt
 
 ## 5. Results
 
-### 5.1 Real Semantic Embeddings (99K, dim=384)
+### 5.1 Ablation Study (99K real embeddings, dim=384)
+
+| Variant | Recall@10 | Latency | Memory |
+|---------|-----------|---------|--------|
+| Binary only (no rerank) | 0.735 | <1ms | 4.5 MB |
+| Float only (brute force) | 1.000 | 0.05ms | 145 MB |
+| **Two-stage (rf=10)** | **0.889** | **8.6ms** | **4.5 + 145 MB** |
+
+The two-stage design recovers 15.4 percentage points of recall over binary-only (0.889 vs 0.735) by applying float reranking to the binary-filtered candidate set. The recall gap to brute force (11.1 points) is attributable to sign-bit quantization noise — some true neighbors receive similar Hamming distances to non-neighbors and are excluded from the candidate set.
+
+### 5.2 Real Semantic Embeddings (99K, dim=384)
 
 | Method | Recall@10 | Latency (mean ± std) | QPS |
 |--------|-----------|---------------------|-----|

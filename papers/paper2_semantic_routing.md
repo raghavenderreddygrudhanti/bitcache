@@ -91,9 +91,33 @@ As a baseline, we also evaluate binary k-means routing where centroids are compu
 | Exhaustive (Gen1 rf=500) | 0.8909 | 11.25ms | 1x |
 | **Float routed (P=128, probe=8)** | **0.8918** | **2.99ms** | **3.8x** |
 
-Float routing achieves equivalent recall at 3.8x lower latency by scanning only 6.2% of the corpus. The 100% partition hit rate indicates that all true neighbors are present in the probed partitions — the recall ceiling is determined by binary quantization noise within partitions, not by routing quality.
+### 4.2 Multi-System Competitive Benchmark (99K real embeddings)
 
-### 4.2 Binary Routing Failure (500K synthetic, dim=768)
+| Method | Recall@10 | Latency | Scan% | Memory Model |
+|--------|-----------|---------|-------|--------------|
+| FAISS IVF (nlist=128, nprobe=8) | 0.986 | 0.07ms | 6.2% | float partitions |
+| **Gen3 float routed (P=128, probe=8)** | **0.900** | **3.5ms** | **6.2%** | binary + float rerank |
+| hnswlib (M=32, ef=64) | 0.896 | 0.03ms | — | float + graph |
+| FAISS HNSW (M=32, ef=64) | 0.853 | 0.01ms | — | float + graph |
+| Annoy (n_trees=10) | 0.737 | 0.2ms | — | tree index |
+
+At matched scan volume (6.2%), Gen3 achieves 0.900 recall compared to FAISS IVF at 0.986. The recall gap is attributable to binary quantization noise within partitions — FAISS IVF uses float scoring throughout. Gen3's advantage is 32x compression of the candidate filtering index. Gen3 outperforms hnswlib (0.896) and FAISS HNSW (0.853) on recall under the tested configurations.
+
+**Throughput note:** FAISS and hnswlib achieve 14,000-86,000 QPS due to C++ SIMD implementation. Gen3's 334 QPS reflects Python interpreter overhead, not architectural limitation.
+
+### 4.3 Probe Sensitivity Analysis (P=128, rf=500)
+
+| Probe | Recall@10 | Latency | Scan% |
+|-------|-----------|---------|-------|
+| 2 | 0.873 | 1.0ms | 1.6% |
+| 4 | 0.901 | 2.0ms | 3.1% |
+| 8 | 0.900 | 3.4ms | 6.2% |
+| 16 | 0.897 | 4.0ms | 12.5% |
+| 32 | 0.900 | 5.5ms | 25.0% |
+
+Recall saturates at probe=4 (0.901) and does not improve with additional probes. This confirms strong partition locality: true neighbors concentrate in 3-4 partitions out of 128. Scanning beyond 4 partitions adds latency without recall benefit.
+
+### 4.4 Binary Routing Failure (500K synthetic, dim=768)
 
 | Method | Partition Hit Rate | Recall@10 |
 |--------|-------------------|-----------|
