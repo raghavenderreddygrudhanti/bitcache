@@ -86,23 +86,24 @@ Layer 1: BinaryIndex        — sign-bit quantization (32x compression)
 
 Each layer is independently usable and composable.
 
-## Benchmarks
+## Experiments
+
+Organized by paper:
 
 ```bash
-# Recall-vs-rf curve (50K synthetic)
-python benchmarks/eval_rf_curve.py
+# Paper 1: Staged Retrieval
+python experiments/paper1_staged_retrieval/eval_rf_curve.py    # recall-vs-rf curve
+python experiments/paper1_staged_retrieval/eval_scale.py       # 50K → 500K → 5M
+python experiments/paper1_staged_retrieval/eval_all_dbs.py     # 14-method comparison
 
-# Scale test (50K → 500K → 5M)
-python benchmarks/eval_scale.py
+# Paper 2: Semantic Routing
+python experiments/paper2_semantic_routing/eval_realistic.py   # float routing + baselines
 
-# 14-method comparison (FAISS, hnswlib, nmslib, USearch, Annoy, etc.)
-python benchmarks/eval_all_dbs.py
-
-# Realistic embeddings + FAISS baselines
-python benchmarks/eval_realistic.py
+# Paper 3: Memory Systems
+python experiments/paper3_memory_systems/eval_agent_workload.py  # end-to-end agent workload
 ```
 
-Dependencies for benchmarks:
+Dependencies:
 ```bash
 pip install faiss-cpu sentence-transformers matplotlib scikit-learn hnswlib annoy
 ```
