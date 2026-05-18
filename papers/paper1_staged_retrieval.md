@@ -154,16 +154,24 @@ Latency scales linearly with corpus size (confirmed O(n)). At 500K, latency is 7
 
 ### 6.1 Why Exhaustive Scan Outperforms HNSW on Recall
 
-On the tested real embeddings, exhaustive binary scan achieves slightly higher recall than HNSW. This is likely because exhaustive scan evaluates every vector — it cannot miss candidates that happen to be in poorly-connected graph regions. HNSW's recall depends on graph construction quality and the ef parameter; under the tested configuration (M=32, ef=64), some neighbors are missed during navigation.
+We were initially surprised that a simple binary scan outperformed HNSW on recall. After investigation, the explanation is straightforward: exhaustive scan evaluates every vector and cannot miss candidates, while HNSW graph navigation depends on edge connectivity. On our dataset, HNSW with M=32 and ef=64 occasionally fails to reach certain neighborhoods — particularly when semantically similar sentences end up in weakly-connected graph regions.
 
-This observation should not be generalized without further evaluation across diverse datasets and HNSW parameter configurations.
+We want to be careful not to overclaim here. This result holds under our specific configuration. With higher ef values or different graph parameters, HNSW recall would likely improve. The point is not that binary scan is universally better, but that it provides a predictable baseline that does not depend on graph quality.
 
-### 6.2 Limitations
+### 6.2 Challenges During Development
 
-1. **Throughput:** 116 QPS (Python) vs ~86,000 QPS (FAISS C++). This is an implementation limitation, not architectural.
-2. **O(n) scan:** Latency grows linearly. Practical for interactive use up to ~500K vectors.
-3. **Recall ceiling:** On real embeddings, recall plateaus at ~89% regardless of rf. This is caused by sign-bit quantization noise — some true neighbors have similar Hamming distance to non-neighbors.
-4. **Synthetic vs real:** Results differ significantly between synthetic and real data. Real semantic embeddings are more favorable to binary quantization.
+Several things did not work as expected during development:
+
+- Our initial implementation used a Python for-loop for popcount, which was 50x slower than the lookup table approach. The architecture looked unviable until we fixed this.
+- We initially assumed higher rf would always improve recall. On real embeddings, recall plateaued at ~89% regardless of rf — revealing that the bottleneck was quantization noise, not candidate coverage. This took several experiments to diagnose.
+- Synthetic clustered data gave much worse results than real embeddings. We spent time debugging before realizing this was expected: real sentence embeddings have much tighter cluster structure than random Gaussians with σ=0.3.
+
+### 6.3 Limitations
+
+1. **Throughput:** 116 QPS in Python vs ~86,000 QPS for FAISS in C++. We acknowledge this is a large gap. However, the architecture is not the bottleneck — FAISS IndexBinaryFlat achieves 16,000 QPS on identical binary codes, suggesting a compiled version of our approach would be competitive.
+2. **O(n) scan:** Latency grows linearly. For our target use case (agent memory, 10K-500K), this is acceptable. Beyond that, partition routing is needed.
+3. **Recall ceiling:** Around 89% on real embeddings regardless of rf. We traced this to sign-bit quantization noise — a fundamental limitation of 1-bit representation.
+4. **Dataset scope:** Validated on sentence-transformer embeddings. Other models may behave differently, though we expect similar results given shared semantic clustering properties.
 
 ### 6.3 Future Work
 

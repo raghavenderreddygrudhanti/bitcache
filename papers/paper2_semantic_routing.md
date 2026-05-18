@@ -137,19 +137,20 @@ The contrast between real and synthetic results reveals a key property: **real s
 
 ### 5.1 When Does Float Routing Work?
 
-Float routing requires that true nearest neighbors concentrate in a small number of partitions. This holds when:
-- Embeddings form semantically coherent clusters (topic structure)
-- Clusters are separable in the embedding space (low inter-cluster overlap)
-- The number of partitions is appropriate for the data structure
+Float routing requires that true nearest neighbors concentrate in a small number of partitions. This holds when embeddings form semantically coherent clusters that are separable in the embedding space. On real sentence-transformer embeddings, these conditions are clearly satisfied — the 100% hit rate confirms it.
 
-On real sentence-transformer embeddings, these conditions are satisfied. On synthetic data with high overlap, they are not.
+We initially tried binary k-means for routing (Gen2) and were puzzled when recall collapsed at 500K scale. The diagnostic — measuring partition hit rate directly — revealed the problem immediately: binary centroids simply do not capture semantic structure. This was an important lesson: the metric space used for routing must match the metric space where similarity is defined.
 
-### 5.2 Limitations
+### 5.2 Comparison with IVF
 
-1. **Validated at 99K only.** Partition locality at 500K-1M real embeddings is not yet confirmed.
-2. **Build time increases** from 0.1s (exhaustive) to 2.5s (k-means construction).
-3. **Recall ceiling unchanged** at ~89% — determined by binary quantization, not routing.
-4. **Data-dependent.** Routing quality depends on embedding distribution. Not all embedding models may produce equally partition-local representations.
+Our approach resembles FAISS IndexIVF conceptually — both route queries to cluster centroids and search within partitions. The key difference is what happens inside partitions: IVF uses float scoring (expensive but precise), while we use binary Hamming filtering followed by float reranking on a smaller set. At matched scan volume (6.2%), IVF achieves higher recall (0.986 vs 0.900) because it avoids quantization noise entirely. Our advantage is the 32x compressed candidate index — relevant when memory is constrained.
+
+### 5.3 Limitations
+
+1. **Validated at 99K only.** We have not yet confirmed partition locality at 500K-1M with real embeddings. This is the most important next experiment.
+2. **Build time increases** from 0.1s (exhaustive) to 2.5s (k-means). For streaming workloads with frequent rebuilds, this matters.
+3. **Recall ceiling unchanged** at ~89%. Routing solves speed but not quantization noise.
+4. **Data-dependent.** We cannot guarantee all embedding models produce equally partition-local representations.
 
 ### 5.3 Relationship to Prior Work
 
