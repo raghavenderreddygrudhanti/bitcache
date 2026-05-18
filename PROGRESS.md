@@ -218,13 +218,29 @@ contains the true neighbors. The synthetic experiments are conservative
 lower bounds.
 
 ## DO NOT DO YET
-- Partition routing
-- Rust rewrite
-- Distributed retrieval
-- Adaptive rf implementation
-- More features
+- ~~Partition routing~~ — DONE (Gen2). Works at 100K, fails at 500K+ (routing quality).
+- Float-space routing (Gen3) — future work, identified but not started
+- Rust rewrite — not needed for paper
+- Distributed retrieval — not needed for paper
+- Adaptive rf — described in paper, not implemented
 
-Stabilize and validate generation 1 first.
+## Gen2 Diagnostic (Critical Finding)
+
+Partition hit rate at scale:
+- 99K: ~90% (works — true neighbors are in probed partitions)
+- 500K: 9.2% (fails — binary k-means doesn't preserve semantic neighborhoods)
+- 1M: 11.2% (fails — same reason)
+
+Root cause: binary k-means centroids don't capture float-space semantic structure at scale.
+Solution identified: float-space centroid routing (Gen3 future work).
+
+Gen1 exhaustive still works at 500K (82.5% recall at rf=1000, 81ms). The retrieval
+architecture is sound. Only the routing mechanism needs improvement.
+
+## PROJECT STATUS: FROZEN FOR SUBMISSION
+
+Paper is ready. Code is stable. 68 tests passing. Results validated on real embeddings.
+Do not add features. Focus on submission and review.
 
 ## Scale Test Results (Critical Finding)
 

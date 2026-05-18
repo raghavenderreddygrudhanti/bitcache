@@ -180,11 +180,24 @@ At 100K real embeddings, recall is flat across rf values (0.886-0.893). Increasi
 
 ### 5.4 Future Directions
 
-1. **Higher-bit first-stage**: 2-bit or 4-bit candidate filtering to raise the recall ceiling beyond 89%.
-2. **Binary partitioning**: Reduce O(n) to O(n/p) via coarse binary clustering.
-3. **SIMD binary scan**: Close the throughput gap with FAISS via AVX2/NEON popcount.
-4. **Tiered storage**: Binary codes in RAM, float vectors on SSD, loaded on demand.
-5. **Adaptive rerank factor**: Dynamic rf selection based on score-gap confidence.
+1. **Float-space semantic routing**: Binary k-means partition routing fails at 500K+ scale because binary centroids do not preserve semantic neighborhoods (partition hit rate drops to 9-11%). The natural evolution is float-space coarse centroid routing followed by binary filtering within selected partitions — combining semantic routing quality with binary scan efficiency.
+2. **Higher-bit first-stage quantization**: The recall ceiling (~89% at 100K) is caused by sign-bit quantization noise, not candidate coverage. 2-bit or 4-bit first-stage filtering would raise this ceiling without increasing scan volume.
+3. **SIMD binary scan**: AVX2/NEON popcount on the binary scan loop would close the throughput gap with FAISS Binary Flat (11K QPS vs current 118 QPS).
+4. **Tiered storage**: Binary codes in RAM, float vectors on SSD, loaded on demand for the rf×k candidates that survive Stage 1.
+5. **Adaptive rerank factor**: Dynamic rf selection based on score-gap confidence in Stage 1 results.
+
+### 5.5 Partition Routing: Experimental Findings
+
+We implemented binary k-means partition routing (Gen2) to reduce O(n) scan to O(n×R/P). At 99K real embeddings, this achieves 6.8x speedup with no recall loss (P=128, probe=8). However, at 500K-1M synthetic vectors, partition hit rate drops to 9-11% — meaning only 9-11% of true top-10 neighbors reside in the probed partitions. This is a routing quality failure, not a retrieval architecture failure: Gen1 exhaustive scan at rf=1000 still achieves 82.5% recall at 500K.
+
+**Diagnostic results (500K synthetic, dim=768):**
+
+| Method | rf | Recall@10 | Latency | Partition Hit Rate |
+|--------|-----|-----------|---------|-------------------|
+| Gen1 exhaustive | 1000 | 0.825 | 81ms | N/A (scans all) |
+| Gen2 partitioned | 1000 | 0.092 | 15ms | 9.2% |
+
+The failure is attributable to binary k-means producing partitions that do not align with semantic neighborhoods at scale. Float-space centroid routing — where partitions are defined by float vector similarity rather than binary Hamming distance — is the identified solution for Generation 3.
 
 ---
 
