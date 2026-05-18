@@ -1,0 +1,72 @@
+[
+  {
+    "rf": 10,
+    "recall_at_10": 0.303,
+    "avg_latency_ms": 7.76,
+    "p50_latency_ms": 7.55,
+    "p95_latency_ms": 8.1,
+    "qps": 128.8,
+    "candidates_reranked": 100,
+    "float_ops": 76800
+  },
+  {
+    "rf": 25,
+    "recall_at_10": 0.449,
+    "avg_latency_ms": 7.69,
+    "p50_latency_ms": 7.66,
+    "p95_latency_ms": 8.26,
+    "qps": 130.0,
+    "candidates_reranked": 250,
+    "float_ops": 192000
+  },
+  {
+    "rf": 50,
+    "recall_at_10": 0.557,
+    "avg_latency_ms": 7.9,
+    "p50_latency_ms": 7.87,
+    "p95_latency_ms": 8.41,
+    "qps": 126.5,
+    "candidates_reranked": 500,
+    "float_ops": 384000
+  },
+  {
+    "rf": 100,
+    "recall_at_10": 0.687,
+    "avg_latency_ms": 8.18,
+    "p50_latency_ms": 8.17,
+    "p95_latency_ms": 8.6,
+    "qps": 122.2,
+    "candidates_reranked": 1000,
+    "float_ops": 768000
+  },
+  {
+    "rf": 200,
+    "recall_at_10": 0.802,
+    "avg_latency_ms": 8.94,
+    "p50_latency_ms": 8.91,
+    "p95_latency_ms": 9.69,
+    "qps": 111.8,
+    "candidates_reranked": 2000,
+    "float_ops": 1536000
+  },
+  {
+    "rf": 500,
+    "recall_at_10": 0.935,
+    "avg_latency_ms": 10.14,
+    "p50_latency_ms": 10.14,
+    "p95_latency_ms": 10.93,
+    "qps": 98.6,
+    "candidates_reranked": 5000,
+    "float_ops": 3840000
+  },
+  {
+    "rf": 1000,
+    "recall_at_10": 0.973,
+    "avg_latency_ms": 14.88,
+    "p50_latency_ms": 14.64,
+    "p95_latency_ms": 15.65,
+    "qps": 67.2,
+    "candidates_reranked": 10000,
+    "float_ops": 7680000
+  }
+]
