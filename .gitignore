@@ -1,8 +1,21 @@
+# Rust
+/target/
+
+# Python (build artifacts only)
 __pycache__/
 *.pyc
 *.egg-info/
+.pytest_cache/
 dist/
 build/
-.pytest_cache/
-benchmarks/data/
+
+# Data (generated, not committed)
+/data/
+
+# OS
 .DS_Store
+*.swp
+
+# IDE
+.idea/
+.vscode/

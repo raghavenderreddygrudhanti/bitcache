@@ -1,4 +1,4 @@
-# bitcache: A Layered Memory Architecture for Autonomous AI Agents
+# Bitcache Memory: A Layered Architecture for Persistent Agent Memory
 
 **Raghavender Reddy Grudhanti**
 
@@ -6,7 +6,7 @@
 
 ## Abstract
 
-We present bitcache, a composable persistent memory architecture for autonomous AI agents that integrates retrieval, mutation, prioritization, and relational reasoning under bounded resources. The system answers a central question: how should AI agents manage long-term memory when knowledge evolves continuously, not all memories are equally important, and context requires both similarity and relationships? We validate the architecture through an end-to-end enterprise operations copilot workload demonstrating: semantic retrieval (0.55ms), graph expansion (<0.01ms), importance reinforcement on access, temporal decay (90% importance reduction over 5 days), and capacity-based eviction. Each layer is independently composable: agents may use staged retrieval alone, or combine all six layers for full memory lifecycle management.
+We present Bitcache Memory, a composable persistent memory architecture for autonomous AI agents that integrates retrieval, mutation, prioritization, and relational reasoning under bounded resources. The system answers a central question: how should AI agents manage long-term memory when knowledge evolves continuously, not all memories are equally important, and context requires both similarity and relationships? The Rust implementation achieves production-style throughput: 423K inserts/sec, 4,887 QPS for memory retrieval, 5.6M deletes/sec, and 12,200 QPS for graph search with 2-hop expansion. Each layer is independently composable: agents may use staged retrieval alone, or combine all six layers for full memory lifecycle management.
 
 ---
 
@@ -34,6 +34,8 @@ We propose a layered architecture where each layer adds a specific capability, a
 ---
 
 ## 2. Architecture
+
+![Figure 1: Bitcache Six-Layer Memory Architecture](figures/paper3_architecture.png)
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -63,7 +65,7 @@ Each layer builds on the previous. A minimal agent uses Layer 2 (staged retrieva
 
 ## 3. Memory Semantics
 
-bitcache defines five memory operations that distinguish agent memory from vector search:
+Bitcache defines five memory operations that distinguish agent memory from vector search:
 
 ### 3.1 Recency
 
@@ -97,45 +99,67 @@ Each memory has a score in [0, 1] reflecting its current value to the agent. Imp
 
 When memory capacity is reached, the lowest-importance memory is removed. This enforces bounded resource usage without manual cleanup.
 
+![Figure 2: Memory Lifecycle Flow](figures/paper3_lifecycle.png)
+
+![Figure 3: Importance Decay and Reinforcement](figures/paper3_decay_reinforcement.png)
+
 ---
 
-## 4. End-to-End Validation: Enterprise Operations Copilot
+## 4. Throughput Characterization
 
-We validate the full architecture through a realistic workload: an AI copilot supporting telecom operations that receives incidents, runbooks, and system notes.
+### 4.1 Streaming Operations (StreamingIndex)
 
-### 4.1 Workload
+| Operation | Throughput | Notes |
+|-----------|-----------|-------|
+| Insert | 423,174 vectors/sec | Includes normalize + quantize |
+| Delete | 5,611,146 ops/sec | O(1) slot reuse |
+| Search (50K index, rf=10) | 628 QPS | Two-stage retrieval |
+| Build (99K) | 0.23s | From flat vectors |
 
-| Step | Operation | Description |
-|------|-----------|-------------|
-| 1 | Insert | 10 operational events (incidents, runbooks, notes) |
-| 2 | Retrieve | Semantic search for "database connection issues" |
-| 3 | Graph expand | Find systems connected to the affected component |
-| 4 | Reinforce | Retrieved memories gain importance |
-| 5 | Decay | Simulate 5 days of inactivity |
-| 6 | Evict | Enforce capacity=5, remove lowest importance |
+### 4.2 Agent Memory (AgentMemory)
 
-### 4.2 Results
+| Operation | Throughput | Notes |
+|-----------|-----------|-------|
+| Save memory | 144,512 memories/sec | Includes importance tracking |
+| Retrieve (5K memories, k=5) | 4,887 QPS | Includes decay + reinforce |
+| Eviction | Automatic | Triggered at capacity |
 
-| Step | Latency | Outcome |
-|------|---------|---------|
-| Insert 10 memories | 2.3s (includes embedding) | All stored with importance scores |
-| Semantic retrieval (k=3) | 0.55ms | Found: incident, runbook, and note about prod-db-01 |
-| Graph expansion | <0.01ms | Found: api-gateway depends_on prod-db-01, app-server connects_to prod-db-01 |
-| Reinforcement | automatic | Retrieved memories: importance 0.4 → 0.55, 0.9 → 1.0 |
-| Decay (5 days) | automatic | Mean importance: 0.52 → 0.11 (79% reduction) |
-| Eviction (capacity=5) | automatic | 5 lowest-importance memories removed |
+| Metric | Value |
+|--------|-------|
+| Capacity tested | 5,000 memories |
+| Mean importance after eviction | 0.790 |
+| Min importance remaining | 0.500 |
+| Max importance remaining | 1.000 |
 
-### 4.3 Timeline Example
+### 4.3 Graph Memory (GraphMemory)
 
-| Day | Event | Memory Importance |
-|-----|-------|-------------------|
-| 0 | Incident inserted | 0.90 |
-| 0 | Retrieved by operator query | 1.00 (reinforced) |
-| 2 | No access | 0.80 (decayed) |
-| 5 | No access | 0.50 (decayed) |
-| 5 | Retrieved again | 0.65 (reinforced) |
-| 10 | No access | 0.15 (decayed) |
-| 10 | Capacity reached | Evicted |
+| Operation | Throughput | Notes |
+|-----------|-----------|-------|
+| Add entity | 401,869 entities/sec | Includes vector indexing |
+| Add relation | 2,905,921 relations/sec | Adjacency list insert |
+| Search + 2-hop expand | 12,197 QPS | Vector search + BFS |
+| Search latency | 0.011ms | 1000 entities, 5000 relations |
+
+### 4.4 Memory Lifecycle Validation
+
+| Step | Operation | Result |
+|------|-----------|--------|
+| 1 | Insert 5 memories (importance 0.5-0.9) | Mean importance: 0.700 |
+| 2 | Retrieve top-1 | Importance reinforced: 0.5 → 0.65 |
+| 3 | Insert 3 more (importance 0.95) | Eviction triggered |
+| 4 | After eviction (capacity=5) | Min=0.80, Max=0.95, Mean=0.91 |
+
+The lowest-importance memories are correctly evicted, and retrieved memories gain importance through reinforcement.
+
+### 4.5 Decay Validation
+
+| Decay rate | Days | Initial mean | Final mean | Reduction |
+|-----------|------|-------------|-----------|-----------|
+| 0.05 | 1 | 0.550 | 0.500 | 9.1% |
+| 0.05 | 5 | 0.550 | 0.320 | 41.8% |
+| 0.10 | 5 | 0.550 | 0.100 | 81.8% |
+
+Decay is linear with time. Higher decay rates cause faster forgetting. The mechanism is simple and predictable.
 
 ---
 
@@ -154,7 +178,7 @@ We validate the full architecture through a realistic workload: an AI copilot su
 
 ## 6. Comparison with Existing Systems
 
-| Capability | FAISS | Pinecone | Mem0 | HippoRAG | bitcache |
+| Capability | FAISS | Pinecone | Mem0 | HippoRAG | Bitcache |
 |-----------|-------|----------|------|----------|----------|
 | Semantic retrieval | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Streaming mutation | — | ✓ | ✓ | — | ✓ |
@@ -170,12 +194,13 @@ We validate the full architecture through a realistic workload: an AI copilot su
 
 ## 7. Limitations and Threats to Validity
 
-1. **Simulated workload.** The end-to-end validation uses simulated operational events, not a live LLM agent. Real agent behavior may differ in access patterns and query distribution.
+1. **Simulated workload.** The throughput characterization uses synthetic data, not a live LLM agent. Real agent behavior may differ in access patterns and query distribution.
 2. **Linear decay model.** Biological memory follows power-law forgetting curves (Ebbinghaus). Our linear model is a simplification that may not match optimal agent behavior.
 3. **Manual graph construction.** Entities and relations must be explicitly inserted. No automatic extraction from text is provided.
 4. **Single-process.** No multi-agent shared memory or distributed coordination.
-5. **Python throughput.** Insert latency is dominated by embedding computation (2.3s for 10 events). In production, embedding would be pre-computed or batched.
+5. **No persistence.** Current implementation is in-memory only. Crash recovery and disk persistence are not yet implemented.
 6. **No live evaluation.** We have not measured downstream task performance (e.g., answer quality improvement from memory retrieval).
+7. **No concurrency guarantees.** The current implementation is single-threaded for mutations. Concurrent read/write requires external synchronization.
 
 ---
 
@@ -186,14 +211,15 @@ We validate the full architecture through a realistic workload: an AI copilot su
 3. **Adaptive decay**: Learn decay rates from agent behavior — memories that are consistently useful should decay slower.
 4. **Reinforcement-driven ranking**: Use retrieval feedback (was the memory actually useful?) to adjust importance beyond simple access counting.
 5. **Live agent evaluation**: Measure downstream task performance (QA accuracy, task completion rate) with and without the memory system.
+6. **Persistence and crash recovery**: Add disk-backed storage with write-ahead logging.
 
 ---
 
 ## 9. Conclusion
 
-bitcache provides a composable persistent memory architecture for AI agents that integrates retrieval, mutation, prioritization, and relational reasoning. The central contribution is not any single component, but the layered design that allows agents to compose memory capabilities as needed — from simple staged retrieval (Layer 2) to full lifecycle management with graph reasoning (all six layers).
+Bitcache Memory provides a composable persistent memory architecture for AI agents that integrates retrieval, mutation, prioritization, and relational reasoning. The central contribution is not any single component, but the layered design that allows agents to compose memory capabilities as needed — from simple staged retrieval (Layer 2) to full lifecycle management with graph reasoning (all six layers).
 
-The end-to-end validation demonstrates that the architecture supports realistic agent workloads: semantic retrieval in 0.55ms, graph expansion in <0.01ms, automatic reinforcement and decay, and capacity-based eviction. Each layer is independently validated and composable.
+The Rust implementation demonstrates production-style throughput characteristics: 423K inserts/sec, 4,887 QPS for memory retrieval with decay and reinforcement, and 12,200 QPS for graph search with multi-hop expansion. Each layer is independently validated and composable.
 
 The system is positioned for agent memory workloads at 10K-500K scale where knowledge evolves continuously and must be managed within bounded resources — not as a replacement for web-scale vector databases, but as the memory infrastructure layer between the agent and its knowledge.
 

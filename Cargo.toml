@@ -1,0 +1,44 @@
+[package]
+name = "bitcache"
+version = "0.1.0"
+edition = "2021"
+authors = ["Raghavender Reddy Grudhanti"]
+description = "Routed binary vector retrieval engine for AI agent memory"
+license = "MIT"
+
+[lib]
+name = "bitcache"
+crate-type = ["rlib"]
+
+[[bin]]
+name = "benchmark"
+path = "benches/full_benchmark.rs"
+
+[[bin]]
+name = "quick_metrics"
+path = "benches/quick_metrics.rs"
+
+[[bin]]
+name = "paper_validation"
+path = "benches/paper_validation.rs"
+
+[[bin]]
+name = "real_embeddings_bench"
+path = "benches/real_embeddings_bench.rs"
+
+[features]
+default = []
+python = ["pyo3", "numpy"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"], optional = true }
+numpy = { version = "0.22", optional = true }
+rayon = "1.10"
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
