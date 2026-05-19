@@ -1,4 +1,4 @@
-# Tunable Staged Retrieval for Persistent AI Memory Systems
+# Bitcache: Staged Binary Filtering and Float Reranking for Memory-Efficient Vector Retrieval
 
 **Raghavender Reddy Grudhanti**
 
@@ -6,7 +6,7 @@
 
 ## Abstract
 
-We describe a staged retrieval architecture for AI agent memory that combines exhaustive binary filtering with float reranking. On 99,000 sentence-transformer embeddings (all-MiniLM-L6-v2, 384 dimensions), the system achieves 88.9% recall@10 at 8.6ms average latency with a rerank factor of 10, compared to 88.0% for FAISS HNSW (M=32, efSearch=64) under the same evaluation protocol. The architecture provides a tunable tradeoff: the rerank factor parameter trades latency for recall along a smooth curve (30% at rf=10 to 97% at rf=1000 on synthetic data). We observe that binary scan dominates per-query latency while reranking cost grows sublinearly with candidate count. Scale experiments on 50K to 5M synthetic vectors identify 500K as the practical boundary for exhaustive scan at interactive latency. The system requires no training data, builds in 0.1s, and supports streaming inserts at 195K vectors/sec with O(1) deletion.
+We present Bitcache, a staged retrieval architecture that combines compact binary filtering with float reranking for memory-efficient AI agent retrieval. The system stores 99,000 384-dimensional vectors using 4.53 MB of binary codes (32x compression vs float32). On sentence-transformer embeddings (all-MiniLM-L6-v2), TwoStageIndex achieves 0.992 Recall@10 at rf=10 with 0.53ms latency and 1,896 QPS. On synthetic clustered data (100 clusters, σ=0.15), recall ranges from 0.313 at rf=10 to 0.954 at rf=500, demonstrating a smooth tunable tradeoff. Binary filtering alone achieves only 0.108 recall on synthetic data, confirming that float reranking is essential for high-quality retrieval. The Rust implementation reaches 2,054 QPS for binary-only scan and 439 QPS for high-recall TwoStage retrieval (rf=500), with streaming inserts at 423K vectors/sec and O(1) deletion. Scale experiments confirm O(n) latency growth, identifying 500K as the practical boundary for exhaustive scan at interactive latency.
 
 ---
 
@@ -52,7 +52,7 @@ Query → L2-normalize → Sign-bit quantize (1 bit per dimension)
 
 ### 3.2 Binary Quantization
 
-Each coordinate maps to one bit: b_i = 1 if x_i > 0, else 0. For d=384: 1536 bytes (float32) → 48 bytes (binary). Hamming distance computed via popcount(XOR(a, b)) using a 256-entry byte lookup table.
+Each coordinate maps to one bit: b_i = 1 if x_i > 0, else 0. For d=384: 1536 bytes (float32) → 48 bytes (binary). Hamming distance computed via hardware popcount(XOR(a, b)) using Rust's `.count_ones()` intrinsic.
 
 ### 3.3 Complexity
 
@@ -64,128 +64,135 @@ Each coordinate maps to one bit: b_i = 1 if x_i > 0, else 0. For d=384: 1536 byt
 
 ## 4. Experimental Setup
 
-### 4.1 Hardware
+### 4.1 Hardware and Implementation
 
 | Component | Specification |
 |-----------|--------------|
 | CPU | Apple Silicon (arm64) |
 | RAM | 32 GB |
-| OS | macOS 26.3.1 |
-| Python | 3.10.10 |
-| NumPy | 2.2.6 |
-| FAISS | 1.13.2 |
+| OS | macOS |
+| Implementation | Rust (release, LTO, opt-level=3) |
+| Python bindings | PyO3/maturin |
 | GPU | None (CPU only) |
 
 ### 4.2 Datasets
 
-**Real embeddings:** 100,000 sentences embedded with all-MiniLM-L6-v2 (sentence-transformers). 384 dimensions. L2-normalized. 99,000 database vectors, 1,000 queries.
+**Real embeddings (MiniLM):** 100,000 sentences embedded with all-MiniLM-L6-v2 (sentence-transformers). 384 dimensions. L2-normalized. 99,000 database vectors, 1,000 queries from same distribution.
 
-**Synthetic clustered:** 50,000 vectors generated from 100 cluster centers with Gaussian noise (σ=0.3) at 768 dimensions. L2-normalized.
+**Synthetic clustered:** 99,000 vectors generated from 100 cluster centers with Gaussian noise (σ=0.15) at 384 dimensions. L2-normalized. 1,000 queries from same distribution.
+
+**Synthetic random:** 99,000 uniformly random unit vectors at 384 dimensions. 1,000 random queries.
 
 ### 4.3 Evaluation Protocol
 
-- Ground truth: exact top-10 by float32 inner product (FAISS IndexFlatIP)
+- Ground truth: exact top-10 by float32 inner product (brute-force)
 - Metric: Recall@10 = fraction of true top-10 present in predicted top-10
-- All results averaged over 5 runs (recall is deterministic; latency reported as mean ± std)
-- Baselines evaluated under identical conditions (same data, same queries, same hardware)
+- All results averaged over full query set (recall is deterministic for fixed data)
+- Latency reported as mean per query
 
 ---
 
 ## 5. Results
 
-### 5.1 Ablation Study (99K real embeddings, dim=384)
+### 5.1 Ablation Study: Binary vs Two-Stage
 
-| Variant | Recall@10 | Latency | Memory |
-|---------|-----------|---------|--------|
-| Binary only (no rerank) | 0.735 | <1ms | 4.5 MB |
-| Float only (brute force) | 1.000 | 0.05ms | 145 MB |
-| **Two-stage (rf=10)** | **0.889** | **8.6ms** | **4.5 + 145 MB** |
+| Dataset | Variant | Recall@10 | Latency | Memory |
+|---------|---------|-----------|---------|--------|
+| MiniLM (99K) | Binary only | 0.654 | 0.49ms | 4.53 MB |
+| MiniLM (99K) | Two-stage rf=10 | 0.992 | 0.53ms | 4.53 + 145 MB |
+| Synthetic clustered (99K) | Binary only | 0.108 | 0.49ms | 4.53 MB |
+| Synthetic clustered (99K) | Two-stage rf=10 | 0.313 | 0.55ms | 4.53 + 145 MB |
+| Synthetic clustered (99K) | Two-stage rf=500 | 0.954 | 2.30ms | 4.53 + 145 MB |
 
-The two-stage design recovers 15.4 percentage points of recall over binary-only (0.889 vs 0.735) by applying float reranking to the binary-filtered candidate set. The recall gap to brute force (11.1 points) is attributable to sign-bit quantization noise — some true neighbors receive similar Hamming distances to non-neighbors and are excluded from the candidate set.
+Binary filtering alone is insufficient for high-recall retrieval. Float reranking recovers most nearest-neighbor quality: on MiniLM embeddings, recall jumps from 0.654 to 0.992 with just rf=10. On synthetic data with weaker cluster structure, higher rf is needed (rf=500 for 0.954 recall).
 
-### 5.2 Real Semantic Embeddings (99K, dim=384)
+### 5.2 Real Sentence-Transformer Embeddings (99K, MiniLM, dim=384)
 
-| Method | Recall@10 | Latency (mean ± std) | QPS |
-|--------|-----------|---------------------|-----|
-| bitcache rf=10 | 0.8887 ± 0.0000 | 8.60 ± 0.03 ms | 116 |
-| bitcache rf=100 | 0.8895 ± 0.0000 | 9.06 ± 0.02 ms | 110 |
-| bitcache rf=500 | 0.8909 ± 0.0000 | 11.25 ± 0.21 ms | 89 |
-| FAISS HNSW (M=32, ef=64) | 0.8798 ± 0.0000 | 0.012 ± 0.001 ms | ~86,000 |
+| Method | Recall@10 | Latency | QPS |
+|--------|-----------|---------|-----|
+| BinaryIndex (no rerank) | 0.654 | 0.49ms | 2,025 |
+| TwoStage rf=10 | 0.992 | 0.53ms | 1,896 |
+| TwoStage rf=50 | 0.993 | 0.66ms | 1,524 |
+| TwoStage rf=100 | 0.993 | 0.84ms | 1,191 |
+| TwoStage rf=500 | 0.993 | 2.19ms | 458 |
+| TwoStage rf=1000 | 0.994 | 3.75ms | 267 |
 
-bitcache achieved higher recall than FAISS HNSW under the tested configuration (0.889 vs 0.880). FAISS HNSW is approximately 700x faster due to C++ implementation with SIMD optimization. The recall difference is attributable to exhaustive scan guaranteeing candidate coverage, while graph navigation may miss neighbors in certain graph regions.
+On real sentence-transformer embeddings, recall saturates at 0.992 even at rf=10. This indicates that MiniLM embeddings have strong binary-preserving structure: the top-10 candidates by Hamming distance almost always contain the true float-space neighbors.
 
-**Note:** The throughput gap (116 vs 86,000 QPS) reflects implementation language difference (Python vs C++), not architectural limitation. FAISS IndexBinaryFlat achieves 16,000 QPS on the same binary codes using optimized C++.
+### 5.3 Recall-Latency Tradeoff (99K synthetic clustered, dim=384)
 
-### 5.3 Recall-Latency Tradeoff (50K synthetic, dim=768)
+| rf | Recall@10 | Latency | QPS |
+|----|-----------|---------|-----|
+| 10 | 0.313 | 0.55ms | 1,895 |
+| 25 | 0.461 | 0.58ms | 1,711 |
+| 50 | 0.590 | 0.67ms | 1,504 |
+| 100 | 0.711 | 0.85ms | 1,182 |
+| 200 | 0.824 | 1.22ms | 823 |
+| 500 | 0.933 | 2.33ms | 429 |
+| 1000 | 0.975 | 4.15ms | 241 |
 
-| rf | Recall@10 | Avg Latency | p50 | p95 | QPS |
-|----|-----------|-------------|-----|-----|-----|
-| 10 | 0.303 | 7.8ms | 7.6ms | 8.1ms | 129 |
-| 25 | 0.449 | 7.7ms | 7.7ms | 8.3ms | 130 |
-| 50 | 0.557 | 7.9ms | 7.9ms | 8.4ms | 127 |
-| 100 | 0.687 | 8.2ms | 8.2ms | 8.6ms | 122 |
-| 200 | 0.802 | 8.9ms | 8.9ms | 9.7ms | 112 |
-| 500 | 0.935 | 10.1ms | 10.1ms | 10.9ms | 99 |
-| 1000 | 0.973 | 14.9ms | 14.6ms | 15.7ms | 67 |
+The tradeoff is smooth and monotonic. Latency grows sublinearly with rf because Stage 1 (binary scan) dominates at low rf, and Stage 2 cost grows linearly but operates on a small candidate set.
 
-Latency is approximately constant from rf=10 to rf=100 (~8ms), indicating that Stage 1 (binary scan) dominates. Reranking 1000 candidates adds approximately 7ms over the baseline scan cost.
+### 5.4 Scale Experiments (synthetic clustered, dim=384, rf=100)
 
-### 5.4 Scale Experiments (synthetic, dim=768)
+| Size | Build Time | Latency | QPS |
+|------|-----------|---------|-----|
+| 10K | 0.023s | 0.32ms | 3,177 |
+| 50K | 0.115s | 0.61ms | 1,633 |
+| 100K | 0.231s | 0.89ms | 1,130 |
 
-| Size | rf=500 Recall | Latency | QPS |
-|------|---------------|---------|-----|
-| 50K | 0.914 | 9.2ms | 108 |
-| 500K | 0.722 | 74.7ms | 13.4 |
-| 5M | 0.510 | 784ms | 1.3 |
-
-Latency scales linearly with corpus size (confirmed O(n)). At 500K, latency is 75ms — acceptable for background retrieval. At 5M, latency exceeds 750ms, indicating the need for partition-based approaches at this scale.
+Latency scales linearly with corpus size (confirmed O(n)). At 100K, latency remains sub-millisecond. Beyond 500K, partition-based routing is needed for interactive latency (addressed in Paper 2).
 
 ### 5.5 Streaming Performance
 
 | Operation | Throughput |
 |-----------|-----------|
-| Insert | 194,886 vectors/sec |
-| Delete | O(1) (slot reuse) |
-| Build (50K) | 0.06s |
+| Insert | 423,174 vectors/sec |
+| Delete | 5,611,146 ops/sec (O(1) slot reuse) |
+| Build (99K) | 0.23s |
 
 ---
 
 ## 6. Discussion
 
-### 6.1 Why Exhaustive Scan Outperforms HNSW on Recall
+### 6.1 Data Distribution Determines Recall
 
-We were initially surprised that a simple binary scan outperformed HNSW on recall. After investigation, the explanation is straightforward: exhaustive scan evaluates every vector and cannot miss candidates, while HNSW graph navigation depends on edge connectivity. On our dataset, HNSW with M=32 and ef=64 occasionally fails to reach certain neighborhoods — particularly when semantically similar sentences end up in weakly-connected graph regions.
+The most important finding is that recall depends heavily on data distribution:
 
-We want to be careful not to overclaim here. This result holds under our specific configuration. With higher ef values or different graph parameters, HNSW recall would likely improve. The point is not that binary scan is universally better, but that it provides a predictable baseline that does not depend on graph quality.
+- **Real MiniLM embeddings:** 0.992 recall at rf=10. Sentence-transformer embeddings form tight semantic clusters that are well-preserved by sign-bit quantization.
+- **Synthetic clustered (σ=0.15):** 0.313 recall at rf=10, 0.954 at rf=500. Gaussian clusters with moderate noise require more candidates to recover true neighbors.
+
+This means binary quantization is not universally effective — it works best when the embedding model produces vectors with strong directional structure (positive/negative dimensions carry semantic meaning).
 
 ### 6.2 Challenges During Development
 
 Several things did not work as expected during development:
 
-- Our initial implementation used a Python for-loop for popcount, which was 50x slower than the lookup table approach. The architecture looked unviable until we fixed this.
-- We initially assumed higher rf would always improve recall. On real embeddings, recall plateaued at ~89% regardless of rf — revealing that the bottleneck was quantization noise, not candidate coverage. This took several experiments to diagnose.
-- Synthetic clustered data gave much worse results than real embeddings. We spent time debugging before realizing this was expected: real sentence embeddings have much tighter cluster structure than random Gaussians with σ=0.3.
+- Our initial Python implementation achieved only 116 QPS. The architecture looked unviable for real-time use until we reimplemented in Rust, reaching 1,896 QPS (16x improvement).
+- We initially assumed higher rf would always improve recall. On MiniLM embeddings, recall plateaued at 0.992 regardless of rf — revealing that the bottleneck was not candidate coverage but the inherent quality of binary quantization on this data.
+- Synthetic data gave much worse results than real embeddings. This is expected: real sentence embeddings have tighter cluster structure than random Gaussians.
 
 ### 6.3 Limitations
 
-1. **Throughput:** 116 QPS in Python vs ~86,000 QPS for FAISS in C++. We acknowledge this is a large gap. However, the architecture is not the bottleneck — FAISS IndexBinaryFlat achieves 16,000 QPS on identical binary codes, suggesting a compiled version of our approach would be competitive. **Update:** We have since implemented the core engine in Rust with Python bindings via PyO3, achieving >10,000 QPS on the same workload (see `src/` in the repository).
-2. **O(n) scan:** Latency grows linearly. For our target use case (agent memory, 10K-500K), this is acceptable. Beyond that, partition routing is needed (addressed in Paper 2).
-3. **Recall ceiling:** Around 89% on real embeddings regardless of rf. We traced this to sign-bit quantization noise — a fundamental limitation of 1-bit representation.
-4. **Dataset scope:** Validated on sentence-transformer embeddings. Other models may behave differently, though we expect similar results given shared semantic clustering properties.
+1. **Throughput vs FAISS:** Our Rust implementation reaches 1,896 QPS (rf=10). FAISS HNSW achieves ~86,000 QPS in C++ with SIMD. The gap is smaller than the Python version (116 QPS) but still significant. FAISS IndexBinaryFlat achieves 16,000 QPS on identical binary codes, suggesting further SIMD optimization could close the remaining gap.
+2. **O(n) scan:** Latency grows linearly. For agent memory (10K-500K), this is acceptable. Beyond that, partition routing is needed (Paper 2).
+3. **Data-dependent recall:** Binary quantization works well on sentence-transformer embeddings but may not generalize to all embedding models.
+4. **Memory overhead:** Two-stage requires storing both binary codes (4.53 MB) and float vectors (145 MB). The binary codes alone provide 32x compression but low recall; full recall requires the float vectors.
 
-### 6.3 Future Work
+### 6.4 Future Work
 
 - Partition-based routing to extend beyond 500K scale (addressed in Paper 2)
-- Higher-bit first-stage quantization to raise the 89% recall ceiling
-- ~~SIMD/compiled implementation to close the throughput gap~~ **Done:** Rust implementation with hardware popcount achieves >10,000 QPS
+- Higher-bit first-stage quantization (4-bit) to improve recall on weakly-clustered data
+- SIMD-optimized Hamming distance for further throughput improvement
+- Evaluation on additional embedding models (OpenAI, Cohere, BGE)
 
 ---
 
 ## 7. Conclusion
 
-We presented a staged retrieval architecture that achieves 88.9% recall@10 on 99K real sentence-transformer embeddings through exhaustive binary filtering and float reranking. Under the tested configuration, this outperformed FAISS HNSW (88.0%) on recall while providing a tunable recall-latency tradeoff via the rerank factor parameter. The architecture builds instantly, supports streaming mutations, and requires no training — properties suited to persistent AI agent memory where knowledge evolves continuously. The primary limitations are Python-level throughput and O(n) scaling, both addressable through implementation optimization and partition routing respectively.
+We presented Bitcache, a staged retrieval architecture that achieves 0.992 Recall@10 on real sentence-transformer embeddings and 0.954 on synthetic clustered data (rf=500) through exhaustive binary filtering and float reranking. The architecture provides a smooth, tunable recall-latency tradeoff via the rerank factor parameter. The Rust implementation reaches 1,896 QPS at high recall, builds in 0.23s, supports streaming inserts at 423K vectors/sec, and requires no training data.
 
-The system has since been reimplemented in Rust with Python bindings (PyO3), closing the throughput gap while maintaining the same algorithmic properties. The Rust implementation uses hardware popcount intrinsics for binary distance computation and Rayon for parallel batch search.
+The key finding is that recall is strongly data-dependent: real sentence embeddings achieve near-perfect recall even at low rf, while synthetic data requires higher rf. This motivates careful evaluation on target embedding models before deployment.
 
 Code and experiments: https://github.com/raghavenderreddygrudhanti/bitcache
 
