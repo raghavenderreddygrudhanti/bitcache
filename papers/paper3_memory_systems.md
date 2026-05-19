@@ -219,7 +219,9 @@ Decay is linear with time. Higher decay rates cause faster forgetting. The mecha
 
 Bitcache Memory provides a composable persistent memory architecture for AI agents that integrates retrieval, mutation, prioritization, and relational reasoning. The central contribution is not any single component, but the layered design that allows agents to compose memory capabilities as needed — from simple staged retrieval (Layer 2) to full lifecycle management with graph reasoning (all six layers).
 
-The Rust implementation demonstrates production-style throughput characteristics: 423K inserts/sec, 4,887 QPS for memory retrieval with decay and reinforcement, and 12,200 QPS for graph search with multi-hop expansion. Each layer is independently validated and composable.
+The Rust implementation demonstrates production-style throughput characteristics: 423K inserts/sec, 4,887 QPS for memory retrieval with decay and reinforcement, 12,200 QPS for graph search with multi-hop expansion, and 20,418 QPS for the underlying binary search engine (ARM NEON SIMD, parallel batch). Each layer is independently validated and composable.
+
+FAISS remains the stronger general-purpose vector search library for static, large-scale workloads. Bitcache targets a different design point: persistent AI-agent memory where streaming mutation, bounded resources, and memory lifecycle management matter alongside retrieval quality.
 
 The system is positioned for agent memory workloads at 10K-500K scale where knowledge evolves continuously and must be managed within bounded resources — not as a replacement for web-scale vector databases, but as the memory infrastructure layer between the agent and its knowledge.
 

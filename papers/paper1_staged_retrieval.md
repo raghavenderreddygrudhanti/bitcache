@@ -22,7 +22,7 @@ AI agents operating over extended sessions accumulate knowledge that must be sto
 
 We propose a two-stage architecture where binary quantization serves as a candidate reduction mechanism and float inner product provides precise final scoring. The rerank factor controls the boundary between stages.
 
-**Novelty and positioning.** Bitcache is not designed to compete with FAISS or HNSW on raw throughput. Its contribution is a compact, mutable, predictable retrieval layer for persistent AI agent memory where the following properties matter simultaneously: streaming inserts without rebuild, O(1) deletes, tunable recall via a single parameter, 32x compressed candidate filtering, and composability with memory lifecycle operations (importance decay, reinforcement, eviction). No existing system provides all of these in a single coherent architecture.
+**Novelty and positioning.** Bitcache is not designed to compete with FAISS or HNSW on raw throughput. FAISS remains the stronger general-purpose vector search library, especially for static, large-scale, read-heavy workloads. Bitcache targets a different design point: persistent AI-agent memory, where the system must continuously insert, retrieve, reinforce, decay, evict, delete, and reason over relationships under bounded resources. In this setting, search speed alone is not the full objective; memory lifecycle management is part of the retrieval system. No existing system provides streaming inserts without rebuild, O(1) deletes, tunable recall via a single parameter, 32x compressed candidate filtering, and composability with memory lifecycle operations in a single coherent architecture.
 
 ---
 
@@ -245,8 +245,8 @@ Several things did not work as expected during development:
 
 ### 6.4 Limitations
 
-1. **Throughput vs FAISS:** Our Rust implementation reaches 1,869 QPS (rf=10). FAISS HNSW achieves ~44,000 QPS in C++ with SIMD. Bitcache targets a different design point — not maximum throughput, but composable agent memory with streaming mutation and tunable recall.
-2. **O(n) scan:** Latency grows linearly. For agent memory (10K-100K), this is acceptable. Beyond that, partition routing is needed (Paper 2).
+1. **Throughput vs FAISS:** Our Rust implementation with ARM NEON SIMD reaches 20,418 QPS (parallel batch, rf=10). FAISS HNSW achieves ~44,000 QPS in C++ with SIMD. Bitcache targets a different design point — not maximum throughput, but composable agent memory with streaming mutation and tunable recall. Bitcache exceeds FAISS FlatIP (19,639 QPS) and FAISS IVF (15,071 QPS) on the same hardware.
+2. **O(n) scan:** Latency grows linearly. For agent memory (10K-100K), this is acceptable and the index fits in L2 cache. Beyond 500K, partition routing provides 4.5x speedup (Paper 2).
 3. **Data-dependent recall:** Binary quantization works well on sentence-transformer embeddings (0.740 binary-only, 0.999 with rerank) but fails on SIFT1M (0.025 binary-only). Bitcache is not a universal ANN solution.
 4. **Memory overhead:** Two-stage requires storing both binary codes (4.53 MB) and float vectors (145 MB). The first-stage binary filtering index is 32x compressed, but total system memory includes the float store for reranking.
 5. **SIFT1M results:** On non-semantic data, even rf=500 achieves only 0.533 recall. This is a fundamental limitation of sign-bit quantization on data without directional semantic structure.
@@ -262,11 +262,13 @@ Several things did not work as expected during development:
 
 ## 7. Conclusion
 
-We presented Bitcache, a staged retrieval architecture that achieves 0.999 Recall@10 on deduplicated sentence-transformer embeddings and 0.933 on synthetic clustered data (rf=500) through exhaustive binary filtering and float reranking. The architecture provides a smooth, tunable recall-latency tradeoff via the rerank factor parameter. The Rust implementation reaches 1,869 QPS at high recall on MiniLM embeddings, builds in 0.23s, supports streaming inserts at 413K vectors/sec, and requires no training data.
+We presented Bitcache, a staged retrieval architecture that achieves 0.999 Recall@10 on deduplicated sentence-transformer embeddings and 0.933 on synthetic clustered data (rf=500) through exhaustive binary filtering and float reranking. The architecture provides a smooth, tunable recall-latency tradeoff via the rerank factor parameter.
 
-On MiniLM embeddings, Bitcache reaches 0.999 Recall@10 at 1,869 QPS using rf=10. On synthetic clustered data, higher recall requires larger rerank factors, reaching 0.933 Recall@10 at rf=500 with 435 QPS.
+The Rust implementation with ARM NEON SIMD and Rayon parallel search reaches 20,418 QPS in batch mode — exceeding FAISS FlatIP (19,639 QPS) and FAISS IVF (15,071 QPS) on the same hardware. Sequential single-query throughput is 2,687 QPS at 372µs latency. The system builds in 0.23s, supports streaming inserts at 423K vectors/sec, and requires no training data.
 
-The key finding is that recall is strongly data-dependent: real sentence embeddings achieve near-perfect recall even at low rf, while synthetic data requires higher rf. This motivates careful evaluation on target embedding models before deployment.
+FAISS remains the stronger general-purpose vector search library for static, large-scale workloads. Bitcache targets a different design point: persistent AI-agent memory where streaming mutation, bounded resources, and memory lifecycle management matter alongside retrieval quality.
+
+The key finding is that binary quantization is highly effective on semantic sentence embeddings (0.999 recall) but performs poorly on non-semantic data like SIFT1M (0.025 recall), revealing a data-dependent boundary for binary semantic retrieval.
 
 Code and experiments: https://github.com/raghavenderreddygrudhanti/bitcache
 

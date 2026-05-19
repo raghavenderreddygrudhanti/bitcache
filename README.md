@@ -4,12 +4,13 @@
 
 FAISS is a search engine. Bitcache is a memory system.
 
-FAISS answers: *"find similar vectors fast."*
-Bitcache answers: *"what should an AI agent remember, forget, and retrieve over time?"*
+FAISS is optimized for finding similar vectors fast; Bitcache is designed for AI agents that must remember, forget, update, and reason over memory over time.
+
+FAISS remains the stronger general-purpose vector search library, especially for static, large-scale, read-heavy workloads. Bitcache targets a different design point: persistent AI-agent memory, where the system must continuously insert, retrieve, reinforce, decay, evict, delete, and reason over relationships under bounded resources. In this setting, search speed alone is not the full objective; memory lifecycle management is part of the retrieval system.
 
 ---
 
-## Why Bitcache
+## Why Bitcache (better for mutable AI-agent memory; FAISS is better for pure vector search)
 
 | Capability | Bitcache | FAISS / HNSW |
 |-----------|----------|-------------|
