@@ -147,19 +147,21 @@ impl FloatRoutedIndex {
         (scores, indices)
     }
 
-    /// Batch search.
+    /// Batch search (parallel via Rayon).
     pub fn search_batch(&self, queries: &[f32], k: usize) -> (Vec<Vec<f32>>, Vec<Vec<usize>>) {
+        use rayon::prelude::*;
         let nq = queries.len() / self.dim;
-        let mut all_scores = Vec::with_capacity(nq);
-        let mut all_indices = Vec::with_capacity(nq);
 
-        for i in 0..nq {
-            let q = &queries[i * self.dim..(i + 1) * self.dim];
-            let (scores, indices) = self.search(q, k);
-            all_scores.push(scores);
-            all_indices.push(indices);
-        }
+        let results: Vec<(Vec<f32>, Vec<usize>)> = (0..nq)
+            .into_par_iter()
+            .map(|i| {
+                let q = &queries[i * self.dim..(i + 1) * self.dim];
+                self.search(q, k)
+            })
+            .collect();
 
+        let all_scores: Vec<Vec<f32>> = results.iter().map(|(s, _)| s.clone()).collect();
+        let all_indices: Vec<Vec<usize>> = results.iter().map(|(_, i)| i.clone()).collect();
         (all_scores, all_indices)
     }
 
