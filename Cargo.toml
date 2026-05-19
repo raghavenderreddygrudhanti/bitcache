@@ -22,6 +22,10 @@ path = "benches/quick_metrics.rs"
 name = "paper_validation"
 path = "benches/paper_validation.rs"
 
+[[bin]]
+name = "real_embeddings_bench"
+path = "benches/real_embeddings_bench.rs"
+
 [features]
 default = []
 python = ["pyo3", "numpy"]
