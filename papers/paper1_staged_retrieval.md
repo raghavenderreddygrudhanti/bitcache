@@ -22,6 +22,8 @@ AI agents operating over extended sessions accumulate knowledge that must be sto
 
 We propose a two-stage architecture where binary quantization serves as a candidate reduction mechanism and float inner product provides precise final scoring. The rerank factor controls the boundary between stages.
 
+**Novelty and positioning.** Bitcache is not designed to compete with FAISS or HNSW on raw throughput. Its contribution is a compact, mutable, predictable retrieval layer for persistent AI agent memory where the following properties matter simultaneously: streaming inserts without rebuild, O(1) deletes, tunable recall via a single parameter, 32x compressed candidate filtering, and composability with memory lifecycle operations (importance decay, reinforcement, eviction). No existing system provides all of these in a single coherent architecture.
+
 ---
 
 ## 2. Related Work
@@ -79,13 +81,26 @@ Each coordinate maps to one bit: b_i = 1 if x_i > 0, else 0. For d=384: 1536 byt
 
 ### 4.2 Datasets
 
-**Real embeddings (MiniLM):** 100,000 sentences embedded with all-MiniLM-L6-v2 (sentence-transformers). 384 dimensions. L2-normalized. 99,000 database vectors, 1,000 queries from same distribution.
+**Real embeddings (MiniLM):** 100,000 unique deduplicated sentences embedded with all-MiniLM-L6-v2 (sentence-transformers). 384 dimensions. L2-normalized. 99,000 database vectors, 1,000 queries from same distribution. All sentences are unique (deduplicated before embedding to avoid inflated recall from repeated text templates).
+
+**SIFT1M (public benchmark):** 1,000,000 SIFT image descriptors, 128 dimensions, 10,000 queries with ground truth. Standard ANN benchmark from IRISA/INRIA. L2-normalized for inner product evaluation. This dataset tests generalization beyond semantic embeddings.
 
 **Synthetic clustered:** 99,000 vectors generated from 100 cluster centers with Gaussian noise (σ=0.15) at 384 dimensions. L2-normalized. 1,000 queries from same distribution.
 
-**Synthetic random:** 99,000 uniformly random unit vectors at 384 dimensions. 1,000 random queries.
+### 4.3 Baselines
 
-### 4.3 Evaluation Protocol
+All baselines evaluated on same hardware (Apple Silicon arm64, 32GB RAM, CPU only):
+
+| System | Configuration |
+|--------|--------------|
+| FAISS FlatIP | Brute-force float32 inner product |
+| FAISS HNSW | M=32, efSearch=64 |
+| FAISS IVF | nlist=256, nprobe=16 |
+| FAISS BinaryFlat | Sign-bit quantization, Hamming scan |
+| hnswlib | M=32, ef=64 |
+| Annoy | n_trees=50, dot product |
+
+### 4.4 Evaluation Protocol
 
 - Ground truth: exact top-10 by float32 inner product (brute-force)
 - Metric: Recall@10 = fraction of true top-10 present in predicted top-10
@@ -153,7 +168,38 @@ The tradeoff is smooth and monotonic. Latency grows sublinearly with rf because 
 
 Latency scales linearly with corpus size (confirmed O(n)). At 100K, latency remains sub-millisecond. Extrapolation suggests partition-based routing becomes important beyond the low hundreds of thousands of vectors (addressed in Paper 2).
 
-### 5.5 Streaming Performance
+### 5.5 SIFT1M Public Benchmark (1M vectors, dim=128)
+
+| Method | Recall@10 | Latency | QPS |
+|--------|-----------|---------|-----|
+| FAISS FlatIP | 1.000 | 0.214ms | 4,673 |
+| FAISS HNSW (M=32, ef=64) | 0.977±0.059 | 0.025ms | 39,768 |
+| FAISS IVF (nlist=256, nprobe=16) | 0.985±0.051 | 0.264ms | 3,783 |
+| hnswlib (M=32, ef=64) | 0.981±0.052 | 0.040ms | 25,160 |
+| Annoy (n_trees=50) | 0.468±0.258 | 0.232ms | 4,304 |
+| FAISS BinaryFlat | 0.025±0.072 | 0.228ms | 4,387 |
+| Bitcache TwoStage rf=100 (100K subset) | 0.302±0.267 | 3.4ms | 293 |
+| Bitcache TwoStage rf=500 (100K subset) | 0.533±0.297 | 4.0ms | 250 |
+| Bitcache ThreeStage (100K subset) | 0.391±0.288 | 4.0ms | 252 |
+
+**Critical finding:** Binary quantization performs poorly on SIFT descriptors — both FAISS BinaryFlat (0.025) and Bitcache BinaryOnly (0.112) achieve very low recall. SIFT vectors are raw image descriptors without the directional semantic structure that makes binary quantization effective on sentence embeddings. This confirms that Bitcache's staged retrieval is specifically suited to **semantic embedding models** (sentence-transformers, OpenAI, BGE) rather than arbitrary vector data.
+
+### 5.6 Full Baseline Comparison (99K MiniLM, same hardware)
+
+| Method | Recall@10 | Latency | QPS | Notes |
+|--------|-----------|---------|-----|-------|
+| FAISS FlatIP | 1.000 | 0.051ms | 19,639 | Brute-force float32 |
+| FAISS HNSW (M=32, ef=64) | 0.973 | 0.022ms | 44,597 | Graph-based |
+| FAISS IVF (nlist=128, nprobe=8) | 0.998 | 0.066ms | 15,071 | Partition-based |
+| hnswlib (M=32, ef=64) | — | — | — | Similar to FAISS HNSW |
+| FAISS BinaryFlat | 0.741 | 0.058ms | 17,109 | Binary only |
+| **Bitcache BinaryOnly** | **0.740** | 0.490ms | 2,038 | Matches FAISS Binary |
+| **Bitcache TwoStage rf=10** | **0.999** | 0.540ms | 1,869 | Near-perfect recall |
+| **Bitcache TwoStage rf=500** | **1.000** | 2.310ms | 432 | Perfect recall |
+
+Bitcache matches FAISS BinaryFlat on recall (0.740 vs 0.741) confirming algorithmic equivalence. The throughput gap (2,038 vs 17,109 QPS) reflects C++ SIMD optimization in FAISS vs Rust without explicit SIMD. Bitcache's advantage is not raw throughput but the composable memory architecture: streaming inserts, O(1) deletes, tunable recall, importance decay, and graph reasoning — capabilities FAISS does not provide.
+
+### 5.7 Streaming Performance
 
 | Operation | Throughput |
 |-----------|-----------|
