@@ -197,7 +197,13 @@ Latency scales linearly with corpus size (confirmed O(n)). At 100K, latency rema
 | **Bitcache TwoStage rf=10** | **0.999** | 0.540ms | 1,869 | Near-perfect recall |
 | **Bitcache TwoStage rf=500** | **1.000** | 2.310ms | 432 | Perfect recall |
 
-Bitcache matches FAISS BinaryFlat on recall (0.740 vs 0.741) confirming algorithmic equivalence. The throughput gap (2,038 vs 17,109 QPS) reflects C++ SIMD optimization in FAISS vs Rust without explicit SIMD. Bitcache's advantage is not raw throughput but the composable memory architecture: streaming inserts, O(1) deletes, tunable recall, importance decay, and graph reasoning — capabilities FAISS does not provide.
+Bitcache matches FAISS BinaryFlat on recall (0.740 vs 0.741) confirming algorithmic equivalence. The throughput gap (2,038 vs 17,109 QPS for sequential) reflects C++ SIMD optimization in FAISS vs Rust without explicit SIMD for single queries. In parallel batch mode, Bitcache reaches 20,418 QPS — exceeding FAISS FlatIP (19,639) and FAISS IVF (15,071). Bitcache's advantage is not raw throughput but the composable memory architecture: streaming inserts, O(1) deletes, tunable recall, importance decay, and graph reasoning — capabilities FAISS does not provide.
+
+![Figure 5: Bitcache vs FAISS Comparison](figures/paper1_faiss_comparison.png)
+
+![Figure 6: Optimization Journey (116 → 20,418 QPS)](figures/paper1_optimization_journey.png)
+
+![Figure 7: Recall vs QPS Pareto](figures/paper1_recall_vs_qps.png)
 
 ### 5.7 Streaming Performance
 

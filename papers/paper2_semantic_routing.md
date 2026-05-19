@@ -117,6 +117,8 @@ Float routing consistently outperforms binary routing. The gap is largest on mod
 
 At small scale (99K, 4.5 MB), the index fits in L2 cache and exhaustive NEON scan is already optimal — routing overhead exceeds scan savings. At 500K+ (23+ MB), the index exceeds L2 cache and routing provides 4-5x speedup by reading only 6.2% of data from DRAM.
 
+![Figure 5: Scale Comparison — Exhaustive vs Routed](figures/paper2_scale_comparison.png)
+
 ### 4.4 Probe Sensitivity (20K clustered tight, P=32)
 
 | probe | Recall@10 | Latency | Scan% |

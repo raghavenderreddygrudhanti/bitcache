@@ -133,6 +133,8 @@ When memory capacity is reached, the lowest-importance memory is removed. This e
 
 ### 4.3 Graph Memory (GraphMemory)
 
+![Figure 4: Throughput by Operation Type](figures/paper3_throughput_comparison.png)
+
 | Operation | Throughput | Notes |
 |-----------|-----------|-------|
 | Add entity | 401,869 entities/sec | Includes vector indexing |
