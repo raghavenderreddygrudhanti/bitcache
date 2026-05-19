@@ -1,10 +1,11 @@
 """Regenerate .docx papers from updated markdown sources.
 
 Reads papers/paper{1,2,3}_*.md and generates papers/docx/Paper{1,2,3}_*.docx
-with proper formatting (headings, tables, code blocks, lists).
+with proper formatting (headings, tables, code blocks, lists, images).
 """
 
 import re
+import os
 from pathlib import Path
 from docx import Document
 from docx.shared import Pt, Inches, RGBColor
@@ -18,6 +19,7 @@ def md_to_docx(md_path: str, docx_path: str):
         content = f.read()
 
     doc = Document()
+    md_dir = os.path.dirname(os.path.abspath(md_path))
 
     # Set default font
     style = doc.styles['Normal']
@@ -54,6 +56,35 @@ def md_to_docx(md_path: str, docx_path: str):
             i += 1
             continue
 
+        # Images: ![alt](path)
+        img_match = re.match(r'^!\[(.*?)\]\((.*?)\)\s*$', line.strip())
+        if img_match:
+            alt_text = img_match.group(1)
+            img_path = img_match.group(2)
+            # Resolve relative path from the markdown file's directory
+            abs_img_path = os.path.normpath(os.path.join(md_dir, img_path))
+            if os.path.exists(abs_img_path):
+                p = doc.add_paragraph()
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                run = p.add_run()
+                run.add_picture(abs_img_path, width=Inches(5.5))
+                # Add caption below
+                if alt_text:
+                    cap = doc.add_paragraph()
+                    cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    run = cap.add_run(alt_text)
+                    run.italic = True
+                    run.font.size = Pt(9)
+            else:
+                # Image not found, add placeholder text
+                p = doc.add_paragraph()
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                run = p.add_run(f"[Figure: {alt_text}]")
+                run.italic = True
+                run.font.color.rgb = RGBColor(150, 150, 150)
+            i += 1
+            continue
+
         # Tables
         if line.strip().startswith('|') and '|' in line.strip()[1:]:
             if not in_table:
@@ -78,14 +109,13 @@ def md_to_docx(md_path: str, docx_path: str):
                 for r_idx, row in enumerate(table_rows):
                     for c_idx, cell in enumerate(row):
                         if c_idx < n_cols:
-                            cell_text = re.sub(r'\*\*(.*?)\*\*', r'\1', cell)  # strip bold
-                            cell_text = re.sub(r'~~(.*?)~~', r'\1', cell_text)  # strip strikethrough
+                            cell_text = re.sub(r'\*\*(.*?)\*\*', r'\1', cell)
+                            cell_text = re.sub(r'~~(.*?)~~', r'\1', cell_text)
                             table.rows[r_idx].cells[c_idx].text = cell_text
-                            # Bold header row
                             if r_idx == 0:
                                 for run in table.rows[r_idx].cells[c_idx].paragraphs[0].runs:
                                     run.bold = True
-                doc.add_paragraph()  # spacing after table
+                doc.add_paragraph()
                 table_rows = []
 
         # Headings
@@ -142,7 +172,6 @@ def md_to_docx(md_path: str, docx_path: str):
         text = clean_markdown(line)
         if text:
             p = doc.add_paragraph()
-            # Handle bold segments
             parts = re.split(r'(\*\*.*?\*\*)', line)
             for part in parts:
                 if part.startswith('**') and part.endswith('**'):
@@ -169,17 +198,18 @@ def md_to_docx(md_path: str, docx_path: str):
 
 def clean_markdown(text: str) -> str:
     """Remove markdown formatting from text."""
-    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # bold
-    text = re.sub(r'\*(.*?)\*', r'\1', text)      # italic
-    text = re.sub(r'`(.*?)`', r'\1', text)        # inline code
-    text = re.sub(r'~~(.*?)~~', r'\1', text)      # strikethrough
-    text = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', text)  # links
+    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+    text = re.sub(r'\*(.*?)\*', r'\1', text)
+    text = re.sub(r'`(.*?)`', r'\1', text)
+    text = re.sub(r'~~(.*?)~~', r'\1', text)
+    text = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', text)
+    text = re.sub(r'!\[.*?\]\(.*?\)', '', text)  # remove inline images
     return text
 
 
 def main():
     print("=" * 60)
-    print("  Generating .docx papers from markdown")
+    print("  Generating .docx papers from markdown (with figures)")
     print("=" * 60)
     print()
 
@@ -194,7 +224,7 @@ def main():
     for md_path, docx_path in papers:
         md_to_docx(md_path, docx_path)
 
-    print("\n  Done! All .docx files updated.")
+    print("\n  Done! All .docx files updated with embedded figures.")
 
 
 if __name__ == "__main__":

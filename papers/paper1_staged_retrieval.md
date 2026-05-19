@@ -38,6 +38,8 @@ We propose a two-stage architecture where binary quantization serves as a candid
 
 ### 3.1 Architecture
 
+![Figure 1: Bitcache TwoStage Architecture](figures/paper1_architecture.png)
+
 ```
 Query → L2-normalize → Sign-bit quantize (1 bit per dimension)
                               ↓
@@ -108,6 +110,8 @@ Binary filtering alone is insufficient for high-recall retrieval on synthetic da
 
 Note: The first-stage binary filtering index is 32x smaller than float32 storage. High-recall reranking currently retains float vectors, so total memory is binary codes (4.53 MB) plus the float store (145 MB). The 32x compression applies to the candidate filtering index, not total system memory.
 
+![Figure 4: Memory Usage Comparison](figures/paper1_memory_comparison.png)
+
 ### 5.2 Real Sentence-Transformer Embeddings (99K deduplicated, MiniLM, dim=384)
 
 | Method | Recall@10 | Latency | QPS |
@@ -134,6 +138,10 @@ All sentences are unique (deduplicated before embedding to avoid inflated recall
 | 1000 | 0.975 | 3.97ms | 252 |
 
 The tradeoff is smooth and monotonic. Latency grows sublinearly with rf because Stage 1 (binary scan) dominates at low rf, and Stage 2 cost grows linearly but operates on a small candidate set.
+
+![Figure 2: Recall@10 vs Rerank Factor](figures/paper1_recall_vs_rf.png)
+
+![Figure 3: Recall-Latency Tradeoff](figures/paper1_tradeoff_curve.png)
 
 ### 5.4 Scale Experiments (synthetic clustered, dim=384, rf=100)
 

@@ -32,6 +32,8 @@ We cluster database vectors into P partitions using k-means++ initialization fol
 
 ### 2.2 Query Routing
 
+![Figure 1: FloatRoutedIndex Architecture](figures/paper2_routing_architecture.png)
+
 At query time, compute float inner product between the query and all P centroids. Select the R partitions with highest centroid similarity. This is O(P × d) — negligible for P ≤ 512.
 
 ### 2.3 Staged Retrieval Within Partitions
@@ -126,6 +128,12 @@ On tightly clustered data, routing provides 4.8x speedup at matched recall. On r
 | 16 | 0.797 | 0.40ms | 50.0% |
 
 Recall increases with probe count but with diminishing returns. On this data, probe=4 captures most of the benefit.
+
+![Figure 2: Recall@10 vs Probe Count](figures/paper2_recall_vs_probe.png)
+
+![Figure 3: Scan Volume vs Recall](figures/paper2_scan_vs_recall.png)
+
+![Figure 4: PartitionHit@10 vs Probe Count](figures/paper2_hit_vs_probe.png)
 
 ---
 

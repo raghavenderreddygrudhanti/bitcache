@@ -35,6 +35,8 @@ We propose a layered architecture where each layer adds a specific capability, a
 
 ## 2. Architecture
 
+![Figure 1: Bitcache Six-Layer Memory Architecture](figures/paper3_architecture.png)
+
 ```
 ┌─────────────────────────────────────────────────┐
 │  Layer 6: Graph Memory                          │
@@ -96,6 +98,10 @@ Each memory has a score in [0, 1] reflecting its current value to the agent. Imp
 ### 3.5 Eviction
 
 When memory capacity is reached, the lowest-importance memory is removed. This enforces bounded resource usage without manual cleanup.
+
+![Figure 2: Memory Lifecycle Flow](figures/paper3_lifecycle.png)
+
+![Figure 3: Importance Decay and Reinforcement](figures/paper3_decay_reinforcement.png)
 
 ---
 
