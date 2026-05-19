@@ -18,6 +18,10 @@ path = "benches/full_benchmark.rs"
 name = "quick_metrics"
 path = "benches/quick_metrics.rs"
 
+[[bin]]
+name = "paper_validation"
+path = "benches/paper_validation.rs"
+
 [features]
 default = []
 python = ["pyo3", "numpy"]
