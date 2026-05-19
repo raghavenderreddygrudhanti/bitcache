@@ -80,7 +80,12 @@ pub fn hamming_distance(a: &[u8], b: &[u8]) -> u32 {
 // ─── NEON-accelerated one-to-many scan ───────────────────────────────────────
 
 /// Compute Hamming distance between one query and all database vectors.
-/// Uses NEON SIMD for the inner loop.
+///
+/// Optimizations:
+/// - Pre-loads query into NEON registers (avoids re-reading per vector)
+/// - Prefetches next vectors' cache lines ahead of time
+/// - Processes 4 database vectors per outer loop iteration (reduces branch overhead)
+/// - Uses accumulator registers to minimize horizontal sums
 #[cfg(target_arch = "aarch64")]
 #[inline(never)]
 pub fn hamming_distance_one_to_many(query: &[u8], database: &[u8], n: usize, n_bytes: usize) -> Vec<u32> {
@@ -92,29 +97,125 @@ pub fn hamming_distance_one_to_many(query: &[u8], database: &[u8], n: usize, n_b
         use std::arch::aarch64::*;
 
         let q_ptr = query.as_ptr();
+        let db_ptr = database.as_ptr();
 
-        // Pre-load query chunks into registers (up to 3 for dim=384 → 48 bytes → 3 chunks)
-        // For larger dims, we loop
-        for i in 0..n {
-            let d_ptr = database.as_ptr().add(i * n_bytes);
-            let mut total: u32 = 0;
+        // Pre-load query chunks into registers (stays in registers for entire scan)
+        // For dim=384: 48 bytes = 3 NEON registers
+        // For dim=768: 96 bytes = 6 NEON registers
+        // We support up to 8 chunks (128 bytes = dim 1024)
+        let mut q_regs: [uint8x16_t; 8] = [vdupq_n_u8(0); 8];
+        for c in 0..chunks_16.min(8) {
+            q_regs[c] = vld1q_u8(q_ptr.add(c * 16));
+        }
 
-            for c in 0..chunks_16 {
-                let offset = c * 16;
-                let va = vld1q_u8(q_ptr.add(offset));
-                let vb = vld1q_u8(d_ptr.add(offset));
-                let xor = veorq_u8(va, vb);
-                let cnt = vcntq_u8(xor);
-                total += vaddlvq_u8(cnt) as u32;
+        // Process 4 vectors at a time (unrolled outer loop)
+        let n_unrolled = n / 4 * 4;
+        let prefetch_ahead = 4; // prefetch 4 vectors ahead
+
+        let mut i = 0;
+        while i < n_unrolled {
+            // Prefetch future cache lines
+            if i + prefetch_ahead < n {
+                for p in 0..4usize {
+                    if i + prefetch_ahead + p < n {
+                        let prefetch_ptr = db_ptr.add((i + prefetch_ahead + p) * n_bytes);
+                        #[cfg(target_arch = "aarch64")]
+                        {
+                            // Use inline asm for PRFM (prefetch memory)
+                            std::arch::asm!(
+                                "prfm pldl1keep, [{ptr}]",
+                                ptr = in(reg) prefetch_ptr,
+                                options(nostack, preserves_flags)
+                            );
+                        }
+                    }
+                }
             }
 
-            // Remainder
-            let offset = chunks_16 * 16;
-            for j in 0..remainder {
-                total += (query[offset + j] ^ *d_ptr.add(offset + j)).count_ones();
+            // Process 4 vectors
+            let d_ptr0 = db_ptr.add(i * n_bytes);
+            let d_ptr1 = db_ptr.add((i + 1) * n_bytes);
+            let d_ptr2 = db_ptr.add((i + 2) * n_bytes);
+            let d_ptr3 = db_ptr.add((i + 3) * n_bytes);
+
+            let mut total0: u32 = 0;
+            let mut total1: u32 = 0;
+            let mut total2: u32 = 0;
+            let mut total3: u32 = 0;
+
+            for c in 0..chunks_16.min(8) {
+                let offset = c * 16;
+                let qr = q_regs[c];
+
+                let v0 = vld1q_u8(d_ptr0.add(offset));
+                let v1 = vld1q_u8(d_ptr1.add(offset));
+                let v2 = vld1q_u8(d_ptr2.add(offset));
+                let v3 = vld1q_u8(d_ptr3.add(offset));
+
+                let cnt0 = vcntq_u8(veorq_u8(qr, v0));
+                let cnt1 = vcntq_u8(veorq_u8(qr, v1));
+                let cnt2 = vcntq_u8(veorq_u8(qr, v2));
+                let cnt3 = vcntq_u8(veorq_u8(qr, v3));
+
+                total0 += vaddlvq_u8(cnt0) as u32;
+                total1 += vaddlvq_u8(cnt1) as u32;
+                total2 += vaddlvq_u8(cnt2) as u32;
+                total3 += vaddlvq_u8(cnt3) as u32;
+            }
+
+            // Handle chunks beyond 8 (dim > 1024, rare)
+            for c in 8..chunks_16 {
+                let offset = c * 16;
+                let qc = vld1q_u8(q_ptr.add(offset));
+                total0 += vaddlvq_u8(vcntq_u8(veorq_u8(qc, vld1q_u8(d_ptr0.add(offset))))) as u32;
+                total1 += vaddlvq_u8(vcntq_u8(veorq_u8(qc, vld1q_u8(d_ptr1.add(offset))))) as u32;
+                total2 += vaddlvq_u8(vcntq_u8(veorq_u8(qc, vld1q_u8(d_ptr2.add(offset))))) as u32;
+                total3 += vaddlvq_u8(vcntq_u8(veorq_u8(qc, vld1q_u8(d_ptr3.add(offset))))) as u32;
+            }
+
+            // Remainder bytes (scalar)
+            if remainder > 0 {
+                let offset = chunks_16 * 16;
+                for j in 0..remainder {
+                    let qb = query[offset + j];
+                    total0 += (qb ^ *d_ptr0.add(offset + j)).count_ones();
+                    total1 += (qb ^ *d_ptr1.add(offset + j)).count_ones();
+                    total2 += (qb ^ *d_ptr2.add(offset + j)).count_ones();
+                    total3 += (qb ^ *d_ptr3.add(offset + j)).count_ones();
+                }
+            }
+
+            distances[i] = total0;
+            distances[i + 1] = total1;
+            distances[i + 2] = total2;
+            distances[i + 3] = total3;
+
+            i += 4;
+        }
+
+        // Handle remaining vectors (< 4)
+        while i < n {
+            let d_ptr = db_ptr.add(i * n_bytes);
+            let mut total: u32 = 0;
+
+            for c in 0..chunks_16.min(8) {
+                let v = vld1q_u8(d_ptr.add(c * 16));
+                total += vaddlvq_u8(vcntq_u8(veorq_u8(q_regs[c], v))) as u32;
+            }
+            for c in 8..chunks_16 {
+                let offset = c * 16;
+                let qc = vld1q_u8(q_ptr.add(offset));
+                total += vaddlvq_u8(vcntq_u8(veorq_u8(qc, vld1q_u8(d_ptr.add(offset))))) as u32;
+            }
+            if remainder > 0 {
+                let offset = chunks_16 * 16;
+                for j in 0..remainder {
+                    total += (query[offset + j] ^ *d_ptr.add(offset + j)).count_ones();
+                }
             }
 
             distances[i] = total;
+            i += 1;
         }
     }
 
