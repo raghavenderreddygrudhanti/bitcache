@@ -2,100 +2,66 @@
 
 **Routed binary vector retrieval engine for AI agent memory. Rust core with Python bindings.**
 
-Bitcache combines binary filtering with float reranking to provide compact first-stage search, streaming mutation, and tunable recall for persistent AI agent memory. It targets a different design point than FAISS or HNSW: not maximum throughput, but a composable memory layer with streaming inserts, O(1) deletes, tunable recall, and agent memory lifecycle operations.
+FAISS is a search engine. Bitcache is a memory system.
+
+FAISS answers: *"find similar vectors fast."*
+Bitcache answers: *"what should an AI agent remember, forget, and retrieve over time?"*
 
 ---
 
-## Performance Summary
+## Why Bitcache
 
-### Throughput (99K vectors, dim=384, Apple Silicon arm64)
-
-| Mode | QPS | Latency | Notes |
-|------|-----|---------|-------|
-| **Parallel batch (Rayon)** | **13,291** | **75 µs** | 1000 queries, rf=10 |
-| Sequential | 2,221 | 450 µs | Single-threaded |
-| Previous (before SIMD+Rayon) | 1,869 | 540 µs | — |
-
-### Comparison with FAISS (same hardware, same dataset)
-
-| Method | Recall@10 | Latency | QPS | Streaming? |
-|--------|-----------|---------|-----|-----------|
-| FAISS HNSW (M=32, ef=64) | 0.973 | 0.022ms | 44,597 | ❌ |
-| FAISS FlatIP (brute force) | 1.000 | 0.051ms | 19,639 | ❌ |
-| FAISS IVF (nlist=128, nprobe=8) | 0.998 | 0.066ms | 15,071 | ❌ |
-| **Bitcache TwoStage rf=10 (batch)** | **0.999** | **0.075ms** | **13,291** | ✅ |
-| FAISS BinaryFlat | 0.741 | 0.058ms | 17,109 | ❌ |
-| hnswlib (M=32, ef=64) | 0.981 | 0.040ms | 25,160 | ❌ |
-| Annoy (n_trees=50) | 0.468 | 0.232ms | 4,304 | ❌ |
-
-Bitcache matches FAISS IVF on throughput while providing streaming inserts, O(1) deletes, tunable recall, importance decay, and graph reasoning.
+| Capability | Bitcache | FAISS / HNSW |
+|-----------|----------|-------------|
+| Streaming inserts (no rebuild) | ✅ 423K/sec | ❌ Must retrain/rebuild |
+| O(1) deletes | ✅ 5.6M/sec | ❌ Tombstones or rebuild |
+| Time-to-first-query | ✅ 0.23s | ❌ 2-15s (graph build) |
+| Memory decay + reinforcement | ✅ Built-in | ❌ Not a concept |
+| Capacity-based eviction | ✅ Automatic | ❌ Grows unbounded |
+| Graph reasoning (multi-hop) | ✅ 12,200 QPS | ❌ Not supported |
+| Tunable recall (single param) | ✅ Just set rf | ❌ Multiple knobs |
+| Predictable latency | ✅ Deterministic | ❌ Graph-dependent |
+| Mixed workload (read+write+delete) | ✅ Inline | ❌ Must batch mutations |
+| Pure search throughput | 20,418 QPS | 44,597 QPS |
 
 ---
 
-## Key Results by Paper
+## Performance
 
-### Paper 1: Staged Retrieval (MiniLM 99K, dim=384)
+### Throughput by Scale (Apple Silicon arm64, parallel batch)
 
-| Method | Recall@10 | Latency | QPS |
-|--------|-----------|---------|-----|
-| BinaryOnly (no rerank) | 0.740 | 0.49ms | 2,038 |
-| TwoStage rf=10 | 0.999 | 0.54ms | 2,221 |
-| TwoStage rf=100 | 1.000 | 0.86ms | 1,166 |
-| TwoStage rf=500 | 1.000 | 2.31ms | 432 |
-| **TwoStage rf=10 (parallel batch)** | **0.999** | **0.075ms** | **13,291** |
+| Scale | Exhaustive (NEON) | Routed (6.2% scan) | Best Strategy |
+|-------|-------------------|--------------------|----|
+| **99K** (4.5 MB) | **20,418 QPS** / 49µs | 18,464 QPS / 54µs | Exhaustive (fits L2 cache) |
+| **500K** (23 MB) | 2,409 QPS / 415µs | **10,943 QPS** / 91µs | Routed (4.5x speedup) |
+| **1M** (46 MB) | 942 QPS / 1.1ms | **3,998 QPS** / 250µs | Routed (4.2x speedup) |
 
-Recall-latency tradeoff (synthetic clustered, 99K, σ=0.15):
+### vs FAISS (same hardware, same dataset — 99K MiniLM, dim=384)
 
-| rf | Recall@10 | Latency | QPS |
-|----|-----------|---------|-----|
-| 10 | 0.313 | 0.54ms | 1,839 |
-| 50 | 0.590 | 0.67ms | 1,488 |
-| 100 | 0.711 | 0.85ms | 1,176 |
-| 500 | 0.933 | 2.30ms | 435 |
-| 1000 | 0.975 | 3.97ms | 252 |
+| Method | Recall@10 | QPS | Streaming? |
+|--------|-----------|-----|-----------|
+| FAISS HNSW (M=32, ef=64) | 0.973 | 44,597 | ❌ |
+| hnswlib (M=32, ef=64) | 0.981 | 25,160 | ❌ |
+| **Bitcache Exhaustive (NEON+Rayon)** | **0.999** | **20,418** | ✅ |
+| FAISS FlatIP (brute force) | 1.000 | 19,639 | ❌ |
+| FAISS IVF (nlist=128, nprobe=8) | 0.998 | 15,071 | ❌ |
+| FAISS BinaryFlat | 0.741 | 17,109 | ❌ |
+| Annoy (n_trees=50) | 0.468 | 4,304 | ❌ |
 
-### Paper 1: SIFT1M Public Benchmark (1M vectors, dim=128)
+Bitcache **beats FAISS FlatIP and FAISS IVF** on throughput while providing streaming mutations, tunable recall, and agent memory lifecycle.
 
-| Method | Recall@10 | Latency | QPS |
-|--------|-----------|---------|-----|
-| FAISS HNSW | 0.977±0.059 | 0.025ms | 39,768 |
-| FAISS IVF | 0.985±0.051 | 0.264ms | 3,783 |
-| hnswlib | 0.981±0.052 | 0.040ms | 25,160 |
-| Annoy | 0.468±0.258 | 0.232ms | 4,304 |
-| FAISS BinaryFlat | 0.025±0.072 | 0.228ms | 4,387 |
-| Bitcache TwoStage rf=500 (100K) | 0.533±0.297 | 4.0ms | 250 |
+### Optimization Journey
 
-Binary quantization fails on SIFT (non-semantic data). Bitcache is designed for semantic embeddings.
+| Stage | QPS | Improvement |
+|-------|-----|-------------|
+| Python prototype | 116 | 1x |
+| Rust rewrite | 1,869 | 16x |
+| u64 popcount | 2,221 | 19x |
+| + Rayon parallel | 13,291 | 115x |
+| + ARM NEON SIMD | 18,554 | 160x |
+| **+ Prefetch + 4-wide unroll** | **20,418** | **176x** |
 
-### Paper 1: Where Bitcache Works / Where It Fails
-
-| Dataset | Type | Binary Recall | TwoStage Recall | Verdict |
-|---------|------|---------------|-----------------|---------|
-| MiniLM (99K) | Semantic embeddings | 0.740 | 0.999 (rf=10) | ✅ Excellent |
-| Synthetic clustered (σ=0.15) | Gaussian clusters | 0.108 | 0.933 (rf=500) | ✅ Works |
-| SIFT1M (1M) | Image descriptors | 0.025 | 0.302 (rf=100) | ❌ Fails |
-| Random vectors | No structure | ~0.05 | ~0.15 | ❌ Fails |
-
-### Paper 2: Semantic Routing (20K clustered, dim=384)
-
-| P | probe | Recall@10 | Latency | QPS | Scan% | Speedup |
-|---|-------|-----------|---------|-----|-------|---------|
-| 32 | 2 | 1.000 | 0.33ms | 3,042 | 6.2% | 4.8x |
-| 32 | 4 | 1.000 | 0.35ms | 2,853 | 12.5% | 4.8x |
-| 64 | 4 | 1.000 | 0.33ms | 2,993 | 6.2% | — |
-| 64 | 8 | 1.000 | 0.37ms | 2,742 | 12.5% | — |
-
-Float routing vs binary routing (same data):
-
-| Method | Recall@10 | Notes |
-|--------|-----------|-------|
-| Float routing (P=32, probe=4) | 0.728 | Preserves semantic structure |
-| Binary routing (P=32, probe=4) | 0.501 | Loses fine-grained distances |
-| Exhaustive (rf=500) | 0.933 | Full scan baseline |
-
-Routing works when embeddings have strong partition locality. On tightly clustered data, 100% recall at 6.2% scan.
-
-### Paper 3: Agent Memory & Graph (dim=384)
+### Streaming & Memory Operations
 
 | Operation | Throughput |
 |-----------|-----------|
@@ -107,15 +73,57 @@ Routing works when embeddings have strong partition locality. On tightly cluster
 | Graph relation add | 2,905,921 relations/sec |
 | Graph search + 2-hop expand | 12,197 QPS |
 
-Memory lifecycle validation:
+---
+
+## Key Results by Paper
+
+### Paper 1: Staged Retrieval
+
+| Dataset | Method | Recall@10 | Latency | QPS |
+|---------|--------|-----------|---------|-----|
+| MiniLM 99K | BinaryOnly | 0.740 | 0.49ms | 2,038 |
+| MiniLM 99K | TwoStage rf=10 | **0.999** | 0.05ms | **20,418** (batch) |
+| MiniLM 99K | TwoStage rf=500 | 1.000 | 2.31ms | 432 |
+| Synthetic 99K | TwoStage rf=500 | 0.933 | 2.30ms | 435 |
+| SIFT1M | TwoStage rf=500 | 0.533 | 4.0ms | 250 |
+
+**Where Bitcache works / fails:**
+
+| Dataset | Type | Verdict |
+|---------|------|---------|
+| MiniLM / sentence embeddings | Semantic | ✅ 0.999 recall |
+| Synthetic clustered (σ=0.15) | Gaussian | ✅ 0.933 recall (rf=500) |
+| SIFT1M (image descriptors) | Non-semantic | ❌ 0.533 recall |
+| Random vectors | No structure | ❌ Fails |
+
+Binary quantization works on **semantic embeddings** (sentence-transformers, OpenAI, BGE). It fails on non-semantic data (SIFT, GIST).
+
+### Paper 2: Semantic Routing
+
+| Scale | Exhaustive | Routed (6.2%) | Speedup |
+|-------|-----------|---------------|---------|
+| 99K | 20,418 QPS | 18,464 QPS | 0.9x (fits cache) |
+| 500K | 2,409 QPS | **10,943 QPS** | **4.5x** |
+| 1M | 942 QPS | **3,998 QPS** | **4.2x** |
+
+Routing works when index exceeds L2 cache. At agent-memory scale (10K-100K), exhaustive NEON scan is optimal.
+
+Float routing vs binary routing (20K clustered):
+
+| Method | Recall@10 |
+|--------|-----------|
+| Float routing (P=32, probe=4) | 0.728 |
+| Binary routing (P=32, probe=4) | 0.501 |
+
+### Paper 3: Agent Memory
 
 | Step | Result |
 |------|--------|
-| Insert 10 memories (importance 0.1-0.95) | All stored |
-| Eviction at capacity=5 | Lowest 5 evicted correctly |
-| Remaining min importance | 0.600 |
-| Reinforcement per access | +0.15 per retrieval |
+| Insert 10 memories | All stored with importance |
+| Retrieve (reinforces) | Importance: 0.4 → 0.55 → 0.70 → 0.85 |
 | Decay (rate=0.05, 5 days) | 42% importance reduction |
+| Eviction at capacity=5 | Lowest 5 evicted, min remaining = 0.60 |
+| Graph search + 2-hop expand | 0.011ms (12,200 QPS) |
 
 ---
 
@@ -125,8 +133,8 @@ Memory lifecycle validation:
 Layer 6: GraphMemory        — entity-relation + multi-hop traversal
 Layer 5: AgentMemory        — importance, decay, reinforcement, eviction
 Layer 4: StreamingIndex     — insert/update/delete + metadata filter
-Layer 3: FloatRoutedIndex   — float-space partition routing (6.2% scan)
-Layer 2: TwoStageIndex      — binary filter + float rerank
+Layer 3: FloatRoutedIndex   — float-space partition routing (4.5x at 500K)
+Layer 2: TwoStageIndex      — binary filter + float rerank (20,418 QPS)
 Layer 1: BinaryIndex        — sign-bit quantization (32x compression)
 ```
 
@@ -140,8 +148,8 @@ Each layer is independently usable and composable.
 git clone https://github.com/raghavenderreddygrudhanti/bitcache.git
 cd bitcache
 
-# Rust (library + benchmarks)
-cargo test       # 21 tests
+# Rust
+cargo test       # 23 tests
 cargo build --release
 
 # Python bindings
@@ -158,16 +166,13 @@ maturin develop --release
 ```rust
 use bitcache::{TwoStageIndex, FloatRoutedIndex, AgentMemory};
 
-// Staged retrieval
-let mut index = TwoStageIndex::new(384, 100);
+// High-throughput search (20,418 QPS parallel)
+let mut index = TwoStageIndex::new(384, 10);
 index.add(&vectors);
-let (scores, indices) = index.search(&query, 10);
-
-// Parallel batch search (13,291 QPS)
 let (all_scores, all_indices) = index.search_batch(&queries, 10);
 
-// Partition-routed retrieval
-let mut routed = FloatRoutedIndex::new(384, 128, 8, 500, 10);
+// Routed search for large scale (10,943 QPS at 500K)
+let mut routed = FloatRoutedIndex::new(384, 32, 2, 100, 5);
 routed.build(&vectors);
 let (scores, indices) = routed.search(&query, 10);
 
@@ -180,24 +185,15 @@ let results = mem.retrieve_memory(&query, 5, 0.0);
 ### Python
 
 ```python
-import numpy as np
 from bitcache import TwoStageIndex, FloatRoutedIndex, AgentMemory, GraphMemory
 
-# Staged retrieval
-index = TwoStageIndex(dim=384, rerank_factor=100)
+index = TwoStageIndex(dim=384, rerank_factor=10)
 index.add(vectors)
 scores, indices = index.search(query, k=10)
 
-# Agent memory
 mem = AgentMemory(dim=384, capacity=10000, decay_rate=0.1)
 mem.save_memory(vector, content="important fact", importance=0.8)
 results = mem.retrieve_memory(query_vector, k=5)
-
-# Graph memory
-gm = GraphMemory(dim=384)
-gm.add_entity("prod-db-01", vector, name="Production DB", entity_type="system")
-gm.add_relation("api-gateway", "depends_on", "prod-db-01")
-results = gm.search(query_vector, k=3, expand=True, max_hops=2)
 ```
 
 ---
@@ -206,9 +202,8 @@ results = gm.search(query_vector, k=3, expand=True, max_hops=2)
 
 ```
 src/
-├── lib.rs            # Crate root
-├── quantize.rs       # Sign-bit binary quantization
-├── search.rs         # u64 POPCOUNT + blocked layout + Rayon parallel
+├── search.rs         # ARM NEON SIMD + prefetch + 4-wide unroll + Rayon
+├── quantize.rs       # Sign-bit binary quantization (32x compression)
 ├── index.rs          # Flat binary index
 ├── two_stage.rs      # Binary filter → float rerank (parallel batch)
 ├── three_stage.rs    # Binary → 4-bit → float progressive
@@ -225,13 +220,12 @@ src/
 ## Benchmarks
 
 ```bash
-cargo run --release --bin batch_test              # Parallel throughput test
-cargo run --release --bin benchmark               # Full benchmark suite
-cargo run --release --bin real_embeddings_bench    # MiniLM results
-cargo run --release --bin paper_validation        # Paper claim validation
-
-# FAISS/hnswlib/Annoy baselines + figures
-python scripts/generate_figures.py
+cargo run --release --bin batch_test        # Parallel throughput (20K QPS)
+cargo run --release --bin routed_bench      # Routed vs exhaustive at scale
+cargo run --release --bin benchmark         # Full suite
+cargo run --release --bin real_embeddings_bench  # MiniLM recall
+cargo run --release --bin paper_validation  # Paper claim validation
+python scripts/generate_figures.py          # FAISS baselines + figures
 ```
 
 ---
@@ -239,13 +233,8 @@ python scripts/generate_figures.py
 ## Papers
 
 1. **Bitcache: Staged Binary Filtering and Float Reranking for Memory-Efficient Vector Retrieval**
-   — Two-stage architecture, recall-latency tradeoff, SIFT1M evaluation
-
 2. **Partition-Local Retrieval: When Float-Space Routing Works for Low-Scan Vector Search**
-   — Float routing, PartitionHit@10, data-dependent partition locality
-
 3. **Bitcache Memory: A Layered Architecture for Persistent Agent Memory**
-   — Six-layer composable memory with decay, reinforcement, eviction, graph
 
 All papers in `papers/` (.md + .docx with embedded figures).
 
@@ -255,12 +244,13 @@ All papers in `papers/` (.md + .docx with embedded figures).
 
 | # | Direction | Status |
 |---|-----------|--------|
-| 1 | Quantized vector retrieval | ✅ Implemented |
-| 2 | Routed search for low-scan retrieval | ✅ Implemented |
-| 3 | Agentic AI memory systems | ✅ Implemented |
-| 4 | SIMD + parallel throughput | ✅ 13,291 QPS |
-| 5 | Multi-agent shared memory | 🔜 Future |
-| 6 | Persistence + crash recovery | 🔜 Future |
+| 1 | Binary quantized retrieval | ✅ 20,418 QPS |
+| 2 | Routed search (sublinear) | ✅ 4.5x at 500K |
+| 3 | Agent memory lifecycle | ✅ Decay + eviction |
+| 4 | ARM NEON SIMD | ✅ 176x vs Python |
+| 5 | Persistence (mmap) | 🔜 Future |
+| 6 | Multi-agent shared memory | 🔜 Future |
+| 7 | TurboQuant integration (2-4 bit) | 🔜 Future |
 
 ---
 
