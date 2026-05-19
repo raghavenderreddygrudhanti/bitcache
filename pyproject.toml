@@ -1,31 +1,33 @@
 [build-system]
-requires = ["setuptools>=68.0"]
-build-backend = "setuptools.build_meta"
+requires = ["maturin>=1.5"]
+build-backend = "maturin"
 
 [project]
 name = "bitcache"
 version = "0.1.0"
-description = "Binary vector retrieval engine for AI agent memory"
+description = "Routed binary vector retrieval engine for AI agent memory. Rust core with Python bindings."
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.9"
 authors = [{name = "Raghavender Reddy Grudhanti"}]
-keywords = ["vector-search", "binary-quantization", "ann", "popcount", "agent-memory", "rag"]
+keywords = ["vector-search", "binary-quantization", "ann", "popcount", "agent-memory", "rag", "rust"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = ["numpy>=1.24.0"]
 
 [project.optional-dependencies]
-dev = ["pytest", "faiss-cpu"]
+dev = ["pytest", "faiss-cpu", "maturin"]
 
 [project.urls]
 Homepage = "https://github.com/raghavenderreddygrudhanti/bitcache"
 Repository = "https://github.com/raghavenderreddygrudhanti/bitcache"
 
-[tool.setuptools.packages.find]
-include = ["bitcache*"]
+[tool.maturin]
+features = ["python"]
+module-name = "bitcache._bitcache_rs"

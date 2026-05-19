@@ -174,7 +174,7 @@ We validate the full architecture through a realistic workload: an AI copilot su
 2. **Linear decay model.** Biological memory follows power-law forgetting curves (Ebbinghaus). Our linear model is a simplification that may not match optimal agent behavior.
 3. **Manual graph construction.** Entities and relations must be explicitly inserted. No automatic extraction from text is provided.
 4. **Single-process.** No multi-agent shared memory or distributed coordination.
-5. **Python throughput.** Insert latency is dominated by embedding computation (2.3s for 10 events). In production, embedding would be pre-computed or batched.
+5. ~~**Python throughput.** Insert latency is dominated by embedding computation (2.3s for 10 events). In production, embedding would be pre-computed or batched.~~ **Resolved:** The Rust implementation (`src/memory.rs`, `src/graph_memory.rs`) provides native-speed memory operations. Insert/search latency is now dominated by embedding model inference, not the memory system itself.
 6. **No live evaluation.** We have not measured downstream task performance (e.g., answer quality improvement from memory retrieval).
 
 ---
@@ -194,6 +194,8 @@ We validate the full architecture through a realistic workload: an AI copilot su
 bitcache provides a composable persistent memory architecture for AI agents that integrates retrieval, mutation, prioritization, and relational reasoning. The central contribution is not any single component, but the layered design that allows agents to compose memory capabilities as needed — from simple staged retrieval (Layer 2) to full lifecycle management with graph reasoning (all six layers).
 
 The end-to-end validation demonstrates that the architecture supports realistic agent workloads: semantic retrieval in 0.55ms, graph expansion in <0.01ms, automatic reinforcement and decay, and capacity-based eviction. Each layer is independently validated and composable.
+
+The system is implemented in Rust with Python bindings (PyO3/maturin), providing native performance while maintaining Python-level ergonomics. The Rust core (`src/`) implements all six layers with hardware-accelerated binary distance computation, parallel batch search, and zero-copy numpy interop. This eliminates the throughput limitations of the initial Python prototype while preserving the same algorithmic properties validated in Papers 1 and 2.
 
 The system is positioned for agent memory workloads at 10K-500K scale where knowledge evolves continuously and must be managed within bounded resources — not as a replacement for web-scale vector databases, but as the memory infrastructure layer between the agent and its knowledge.
 

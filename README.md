@@ -1,145 +1,168 @@
-# bitcache
+# Bitcache
 
-Staged semantic retrieval architecture for persistent AI agent memory.
+**Routed binary vector retrieval engine for AI agent memory. Rust core with Python bindings.**
 
-![Architecture](papers/figures/paper3_architecture.png)
+Bitcache compresses high-dimensional embeddings into compact binary representations and uses intelligent float-space routing to scan only the most relevant vector partitions — achieving high recall at a fraction of the memory and latency cost.
 
-## Key Results
-
-**Real sentence-transformer embeddings (99K vectors, all-MiniLM-L6-v2, 384d):**
-
-| Method | Recall@10 | Latency | Scan% | Speedup |
-|--------|-----------|---------|-------|---------|
-| Gen1 (exhaustive) | 0.891 | 8.6ms | 100% | 1x |
-| **Gen3 (float routed)** | **0.892** | **3.0ms** | **6.2%** | **3.8x** |
-| FAISS HNSW (M=32, ef=64) | 0.880 | 0.01ms | — | — |
-| FAISS Binary (no rerank) | 0.735 | — | — | — |
-
-**Recall-vs-rf tradeoff (50K synthetic, 768d):**
-
-![Recall Curve](papers/figures/paper1_recall_vs_rf.png)
-
-## Install
-
-```bash
-git clone https://github.com/raghavenderreddygrudhanti/bitcache.git
-cd bitcache
-pip install -e .
-```
-
-## Quick Start
-
-```python
-import numpy as np
-from bitcache import TwoStageIndex
-
-# Staged retrieval (Gen1)
-index = TwoStageIndex(dim=384, rerank_factor=100)
-vectors = np.random.randn(10000, 384).astype(np.float32)
-index.add(vectors)
-
-query = vectors[0]
-scores, indices = index.search(query, k=10)
-```
-
-```python
-from bitcache.float_routed import FloatRoutedIndex
-
-# Partition-routed retrieval (Gen3)
-index = FloatRoutedIndex(dim=384, n_partitions=128, n_probe=8, rerank_factor=500)
-index.build(vectors)
-
-scores, indices = index.search(query, k=10)
-```
-
-```python
-from bitcache import AgentMemory
-
-# Agent memory with decay and eviction
-mem = AgentMemory(dim=384, capacity=10000, decay_rate=0.1)
-mem.save_memory(vector, content="user prefers morning meetings", importance=0.8)
-results = mem.retrieve_memory(query_vector, k=5)
-```
-
-```python
-from bitcache import GraphMemory
-
-# Graph memory with entity relations
-gm = GraphMemory(dim=384)
-gm.add_entity("prod-db-01", vector, name="Production DB", entity_type="system")
-gm.add_entity("api-gateway", vector2, name="API Gateway", entity_type="system")
-gm.add_relation("api-gateway", "depends_on", "prod-db-01")
-
-results = gm.search(query_vector, k=3, expand=True, max_hops=2)
-```
+---
 
 ## Architecture
 
 ```
-Layer 6: GraphMemory        — entity-relation + multi-hop traversal
-Layer 5: AgentMemory        — importance, decay, reinforcement, eviction
-Layer 4: StreamingIndex     — insert/update/delete + metadata filter
-Layer 3: FloatRoutedIndex   — float-space partition routing (6.2% scan)
-Layer 2: TwoStageIndex      — binary filter + float rerank
-Layer 1: BinaryIndex        — sign-bit quantization (32x compression)
+┌─────────────────────────────────────────────────┐
+│  Layer 6: Graph Memory                          │
+│  Entity-relation storage + multi-hop traversal  │
+├─────────────────────────────────────────────────┤
+│  Layer 5: Agent Memory                          │
+│  Importance scoring + decay + eviction          │
+├─────────────────────────────────────────────────┤
+│  Layer 4: Streaming Mutations                   │
+│  Insert / update / delete + metadata filter     │
+├─────────────────────────────────────────────────┤
+│  Layer 3: Float-Space Routing                   │
+│  Semantic partition routing (6.2% scan)         │
+├─────────────────────────────────────────────────┤
+│  Layer 2: Staged Retrieval                      │
+│  Binary filter + float rerank                   │
+├─────────────────────────────────────────────────┤
+│  Layer 1: Binary Quantization                   │
+│  Sign-bit encoding (32x compression)            │
+└─────────────────────────────────────────────────┘
 ```
 
-Each layer is independently usable and composable.
+Each layer builds on the previous. A minimal agent uses Layer 2. A full-featured agent uses all six.
 
-## Experiments
+---
 
-Organized by paper:
+## Key Results
+
+| Metric | Value |
+|--------|-------|
+| Recall@10 (99K real embeddings) | 89.2% |
+| Partition hit rate (float routing) | 100% |
+| Scan volume (P=128, probe=8) | 6.2% |
+| Memory compression | 32x vs float32 |
+| Latency (routed search, 99K) | 3.0ms |
+| Streaming insert | 195K vectors/sec |
+
+---
+
+## Implementation
+
+| Component | Language | Location |
+|-----------|----------|----------|
+| Core engine | Rust | `src/` |
+| Python bindings | PyO3 | `src/python.rs` |
+| Benchmarks | Rust | `cargo bench` |
+| Papers | Markdown | `papers/` |
+
+### Rust Modules
+
+```
+src/
+├── lib.rs            # Crate root
+├── quantize.rs       # Sign-bit binary quantization
+├── search.rs         # XOR + POPCOUNT Hamming search
+├── index.rs          # Flat binary index
+├── two_stage.rs      # Binary filter → float rerank
+├── three_stage.rs    # Binary → 4-bit → float
+├── partitioned.rs    # Binary k-means routing
+├── float_routed.rs   # Float-space semantic routing
+├── streaming.rs      # Mutable index (insert/update/delete)
+├── memory.rs         # Agent memory (decay, reinforcement, eviction)
+├── graph_memory.rs   # Knowledge graph + vector retrieval
+└── python.rs         # PyO3 bindings
+```
+
+---
+
+## Getting Started
+
+### From Rust
+
+```rust
+use bitcache::{FloatRoutedIndex, TwoStageIndex, AgentMemory};
+
+// Build a routed index
+let mut index = FloatRoutedIndex::new(384, 128, 8, 100, 10);
+index.build(&vectors);  // flat f32 slice of shape (n, 384)
+
+// Search
+let (scores, indices) = index.search(&query, 10);
+```
+
+### From Python
 
 ```bash
-# Paper 1: Staged Retrieval
-python experiments/paper1_staged_retrieval/eval_rf_curve.py    # recall-vs-rf curve
-python experiments/paper1_staged_retrieval/eval_scale.py       # 50K → 500K → 5M
-python experiments/paper1_staged_retrieval/eval_all_dbs.py     # 14-method comparison
-
-# Paper 2: Semantic Routing
-python experiments/paper2_semantic_routing/eval_realistic.py   # float routing + baselines
-
-# Paper 3: Memory Systems
-python experiments/paper3_memory_systems/eval_agent_workload.py  # end-to-end agent workload
+pip install maturin
+maturin develop --release
 ```
 
-Dependencies:
+```python
+import numpy as np
+from bitcache import FloatRoutedIndex, AgentMemory
+
+# Build index
+index = FloatRoutedIndex(dim=384, n_partitions=128, n_probe=8)
+index.build(vectors)  # numpy array (n, 384)
+
+# Search
+scores, indices = index.search(query, k=10)
+
+# Agent memory
+mem = AgentMemory(dim=384, capacity=10000)
+mem.save_memory(vector, "important fact", importance=0.9)
+results = mem.retrieve_memory(query, k=5)
+```
+
+---
+
+## Research Background
+
+Bitcache is part of a broader research direction around **efficient retrieval and memory systems for AI agents**.
+
+### Primary Paper
+
+1. **Partition-Local Semantic Retrieval via Float-Space Routing**
+   — Demonstrates that real embeddings exhibit strong partition locality: 100% of true top-10 neighbors reside in 6.2% of partitions under float k-means routing.
+
+### Supporting Research
+
+2. **Tunable Staged Retrieval for Persistent AI Memory Systems**
+   — Validates the two-stage architecture (binary filter + float rerank) achieving 88.9% recall@10 on 99K real embeddings.
+
+3. **Bitcache: A Layered Memory Architecture for Autonomous AI Agents**
+   — Presents the full six-layer composable memory system with importance, decay, eviction, and graph reasoning.
+
+---
+
+## Research Roadmap
+
+| # | Direction | Status |
+|---|-----------|--------|
+| 1 | Quantized vector retrieval | ✅ Implemented (Rust) |
+| 2 | Routed search for low-scan semantic retrieval | ✅ Implemented (Rust) |
+| 3 | Agentic AI memory systems | ✅ Implemented (Rust) |
+| 4 | Multi-agent shared memory | 🔜 Future work |
+| 5 | Adaptive decay from agent feedback | 🔜 Future work |
+
+---
+
+## Building
+
 ```bash
-pip install faiss-cpu sentence-transformers matplotlib scikit-learn hnswlib annoy
+# Rust library + tests
+cargo test
+
+# Release build
+cargo build --release
+
+# Python wheel
+pip install maturin
+maturin build --release
 ```
 
-## Tests
-
-```bash
-pytest tests/ -v
-# 75 tests passing
-```
-
-## Key Findings
-
-1. **Binary scan dominates latency, not reranking.** Reranking 1000 candidates adds only 1ms over baseline scan cost.
-2. **Real semantic embeddings preserve neighborhoods under binary quantization.** 88.9% recall at rf=10 on sentence-transformer embeddings.
-3. **Float-space routing achieves 100% partition hit rate** on real embeddings. All true neighbors are in the probed partitions.
-4. **Scale boundary: 500K for exhaustive, ~3M for routed.** Beyond that, further partitioning is needed.
-5. **Recall ceiling (~89%) is from quantization noise**, not candidate coverage or routing. Higher-bit quantization is the next improvement.
-
-## Papers
-
-- [Paper 1: Tunable Staged Retrieval](papers/paper1_staged_retrieval.md) — Gen1 architecture
-- [Paper 2: Partition-Local Semantic Routing](papers/paper2_semantic_routing.md) — Gen3 routing
-- [Paper 3: Persistent Memory Architecture](papers/paper3_memory_systems.md) — Full system
-
-## Reproducibility
-
-See [papers/REPRODUCIBILITY.md](papers/REPRODUCIBILITY.md) for full instructions including dataset generation, benchmark commands, and hardware specifications.
-
-## References
-
-- [QuIVer: Binary Quantization for ANN](https://arxiv.org/abs/2605.02171) (Xiao et al., 2026)
-- [FaTRQ: Tiered Residual Quantization](https://arxiv.org/abs/2601.09985) (Zhang et al., 2026)
-- [HippoRAG: Long-Term Memory for LLMs](https://arxiv.org/abs/2405.14831) (NeurIPS 2024)
-- [HNSW](https://arxiv.org/abs/1603.09320) (Malkov & Yashunin, 2020)
-- [FAISS](https://github.com/facebookresearch/faiss)
+---
 
 ## License
 

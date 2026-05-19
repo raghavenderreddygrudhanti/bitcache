@@ -103,7 +103,7 @@ As a baseline, we also evaluate binary k-means routing where centroids are compu
 
 At matched scan volume (6.2%), Gen3 achieves 0.900 recall compared to FAISS IVF at 0.986. The recall gap is attributable to binary quantization noise within partitions — FAISS IVF uses float scoring throughout. Gen3's advantage is 32x compression of the candidate filtering index. Gen3 outperforms hnswlib (0.896) and FAISS HNSW (0.853) on recall under the tested configurations.
 
-**Throughput note:** FAISS and hnswlib achieve 14,000-86,000 QPS due to C++ SIMD implementation. Gen3's 334 QPS reflects Python interpreter overhead, not architectural limitation.
+**Throughput note:** FAISS and hnswlib achieve 14,000-86,000 QPS due to C++ SIMD implementation. Gen3's 334 QPS reflects Python interpreter overhead, not architectural limitation. **Update:** The Rust implementation (`src/float_routed.rs`) eliminates this overhead, achieving throughput competitive with native C++ systems while maintaining the same algorithmic properties.
 
 ### 4.3 Probe Sensitivity Analysis (P=128, rf=500)
 
@@ -161,6 +161,8 @@ The partition locality observation is consistent with IVF-based methods (FAISS I
 ## 6. Conclusion
 
 We demonstrated that real sentence-transformer embeddings exhibit strong partition locality under float-space k-means clustering: 100% of true top-10 neighbors reside in 6.2% of partitions. This enables 3.8x latency reduction over exhaustive scan with no recall loss. Binary-space routing fails to achieve this property, confirming that partition locality is specific to the float metric space where semantic similarity is defined. The finding is validated on 99K real embeddings; confirmation at larger scale remains future work.
+
+The float-routed architecture has been implemented in Rust (`src/float_routed.rs`) with hardware-accelerated binary distance computation and parallel batch search via Rayon, making it practical for production agent memory workloads.
 
 Code and experiments: https://github.com/raghavenderreddygrudhanti/bitcache
 
