@@ -6,7 +6,7 @@
 
 ## Abstract
 
-We present Bitcache, a staged retrieval architecture that combines compact binary filtering with float reranking for memory-efficient AI agent retrieval. The system stores 99,000 384-dimensional vectors using 4.53 MB of binary codes (32x compression vs float32). On deduplicated sentence-transformer embeddings (all-MiniLM-L6-v2), BinaryIndex achieves 0.740 Recall@10 and TwoStageIndex achieves 0.999 Recall@10 at rf=10 with 0.54ms latency and 1,869 QPS. On synthetic clustered data (100 clusters, σ=0.15), recall ranges from 0.313 at rf=10 to 0.933 at rf=500, demonstrating a smooth tunable tradeoff. Binary filtering alone is insufficient for high-recall retrieval, but float reranking recovers nearest-neighbor quality while preserving compact first-stage search. The Rust implementation reaches 2,038 QPS for binary-only scan and 435 QPS for high-recall TwoStage retrieval (rf=500), with streaming inserts at 423K vectors/sec and O(1) deletion. Scale experiments from 10K to 100K confirm O(n) latency growth; extrapolation suggests partition-based routing becomes important beyond the low hundreds of thousands of vectors.
+Bitcache is a staged retrieval architecture for persistent AI agent memory. It combines binary filtering with float reranking to provide compact first-stage search, streaming mutation, and tunable recall. On deduplicated sentence-transformer embeddings (all-MiniLM-L6-v2, 99K vectors, 384 dimensions), TwoStageIndex achieves 0.999 Recall@10 at 0.54ms latency with 1,869 QPS, using 4.53 MB of binary codes (32x compression). On the public SIFT1M benchmark (1M image descriptors, 128 dimensions), binary quantization achieves only 0.025 Recall@10 — revealing a data-dependent boundary for binary semantic retrieval. Experiments across four datasets show that binary quantization is highly effective on semantic sentence embeddings but performs poorly on non-semantic vector data. The system targets a different design point than FAISS or HNSW: not maximum throughput, but a composable memory layer with streaming inserts (423K/sec), O(1) deletes, tunable recall, and compatibility with agent memory lifecycle operations.
 
 ---
 
@@ -211,7 +211,22 @@ Bitcache matches FAISS BinaryFlat on recall (0.740 vs 0.741) confirming algorith
 
 ## 6. Discussion
 
-### 6.1 Data Distribution Determines Recall
+### 6.1 Where Bitcache Works and Where It Fails
+
+| Dataset | Type | Binary Recall | TwoStage Recall | Verdict |
+|---------|------|---------------|-----------------|---------|
+| MiniLM (99K, dim=384) | Semantic sentence embeddings | 0.740 | 0.999 (rf=10) | ✅ Works excellently |
+| Synthetic clustered (99K, σ=0.15) | Gaussian clusters | 0.108 | 0.933 (rf=500) | ✅ Works with higher rf |
+| SIFT1M (1M, dim=128) | Image descriptors | 0.025 | 0.302 (rf=100) | ❌ Fails — not semantic |
+| Synthetic random (99K) | Uniform random | ~0.05 | ~0.15 (rf=100) | ❌ Fails — no structure |
+
+**When Bitcache works:** Embedding models that produce vectors with directional semantic structure — where the sign of each dimension carries meaning. Sentence-transformers (MiniLM, BGE, OpenAI) produce such embeddings.
+
+**When Bitcache fails:** Raw feature descriptors (SIFT, GIST) or uniformly distributed vectors where sign-bit quantization destroys neighborhood structure. For these, full-precision methods (HNSW, IVF) are necessary.
+
+**Implication:** Bitcache should be evaluated on the target embedding model before deployment. If BinaryOnly recall exceeds 0.5, TwoStage will likely achieve >0.9 recall with moderate rf.
+
+### 6.2 Data Distribution Determines Recall
 
 The most important finding is that recall depends heavily on data distribution:
 
@@ -220,7 +235,7 @@ The most important finding is that recall depends heavily on data distribution:
 
 This means binary quantization is not universally effective — it works best when the embedding model produces vectors with strong directional structure (positive/negative dimensions carry semantic meaning).
 
-### 6.2 Challenges During Development
+### 6.3 Challenges During Development
 
 Several things did not work as expected during development:
 
@@ -228,14 +243,15 @@ Several things did not work as expected during development:
 - We initially assumed higher rf would always improve recall. On MiniLM embeddings, recall plateaued at 0.999 regardless of rf — revealing that the bottleneck was not candidate coverage but the inherent quality of binary quantization on this data.
 - Synthetic data gave much worse results than real embeddings. This is expected: real sentence embeddings have tighter cluster structure than random Gaussians.
 
-### 6.3 Limitations
+### 6.4 Limitations
 
-1. **Throughput vs FAISS:** Our Rust implementation reaches 1,869 QPS (rf=10). FAISS HNSW achieves ~86,000 QPS in C++ with SIMD. The gap is smaller than the Python version (116 QPS) but still significant. FAISS IndexBinaryFlat achieves 16,000 QPS on identical binary codes, suggesting further SIMD optimization could close the remaining gap.
+1. **Throughput vs FAISS:** Our Rust implementation reaches 1,869 QPS (rf=10). FAISS HNSW achieves ~44,000 QPS in C++ with SIMD. Bitcache targets a different design point — not maximum throughput, but composable agent memory with streaming mutation and tunable recall.
 2. **O(n) scan:** Latency grows linearly. For agent memory (10K-100K), this is acceptable. Beyond that, partition routing is needed (Paper 2).
-3. **Data-dependent recall:** Binary quantization works well on sentence-transformer embeddings (0.740 binary-only, 0.999 with rerank) but may not generalize to all embedding models.
+3. **Data-dependent recall:** Binary quantization works well on sentence-transformer embeddings (0.740 binary-only, 0.999 with rerank) but fails on SIFT1M (0.025 binary-only). Bitcache is not a universal ANN solution.
 4. **Memory overhead:** Two-stage requires storing both binary codes (4.53 MB) and float vectors (145 MB). The first-stage binary filtering index is 32x compressed, but total system memory includes the float store for reranking.
+5. **SIFT1M results:** On non-semantic data, even rf=500 achieves only 0.533 recall. This is a fundamental limitation of sign-bit quantization on data without directional semantic structure.
 
-### 6.4 Future Work
+### 6.5 Future Work
 
 - Partition-based routing to extend beyond 500K scale (addressed in Paper 2)
 - Higher-bit first-stage quantization (4-bit) to improve recall on weakly-clustered data
@@ -253,6 +269,31 @@ On MiniLM embeddings, Bitcache reaches 0.999 Recall@10 at 1,869 QPS using rf=10.
 The key finding is that recall is strongly data-dependent: real sentence embeddings achieve near-perfect recall even at low rf, while synthetic data requires higher rf. This motivates careful evaluation on target embedding models before deployment.
 
 Code and experiments: https://github.com/raghavenderreddygrudhanti/bitcache
+
+---
+
+## Reproducibility
+
+```bash
+# Clone and build
+git clone https://github.com/raghavenderreddygrudhanti/bitcache.git
+cd bitcache && git checkout rust-rewrite
+cargo build --release
+
+# Run benchmarks
+cargo run --release --bin real_embeddings_bench   # MiniLM results
+cargo run --release --bin paper_validation        # Synthetic results
+cargo run --release --bin benchmark               # Full suite
+
+# Generate embeddings (requires sentence-transformers)
+python experiments/generate_real_embeddings.py
+
+# SIFT1M + FAISS/hnswlib/Annoy baselines
+python scripts/generate_figures.py
+```
+
+Hardware: Apple Silicon arm64, 32GB RAM, macOS, CPU only.
+All latency results: mean over 5 runs (3 for slow methods). Recall is deterministic.
 
 ---
 
