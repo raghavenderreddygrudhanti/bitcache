@@ -12,8 +12,9 @@ import os
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
+
 def generate_sentences(n: int, seed: int = 42) -> list[str]:
-    """Generate diverse sentences by combining templates with topics."""
+    """Generate diverse unique sentences by combining templates with topics and variants."""
     rng = np.random.default_rng(seed)
 
     topics = [
@@ -32,9 +33,27 @@ def generate_sentences(n: int, seed: int = 42) -> list[str]:
         "CI/CD pipelines", "testing strategies", "code review",
         "agile methodology", "sprint planning", "retrospectives",
         "user experience", "accessibility", "responsive design",
-        "mobile development", "iOS", "Android",
-        "web frameworks", "React", "Vue.js",
+        "mobile development", "iOS apps", "Android development",
+        "web frameworks", "React components", "Vue.js reactivity",
         "Python programming", "Rust language", "Go concurrency",
+        "memory management", "garbage collection", "reference counting",
+        "parallel computing", "GPU acceleration", "SIMD optimization",
+        "data pipelines", "ETL processes", "stream processing",
+        "search engines", "inverted indexes", "ranking algorithms",
+        "recommendation systems", "collaborative filtering", "content-based filtering",
+        "anomaly detection", "time series analysis", "forecasting models",
+        "image classification", "object detection", "semantic segmentation",
+        "speech recognition", "text-to-speech", "language translation",
+        "chatbot design", "dialog systems", "intent recognition",
+        "knowledge graphs", "ontology design", "semantic web",
+        "blockchain technology", "smart contracts", "consensus algorithms",
+        "edge computing", "IoT protocols", "sensor networks",
+        "serverless architecture", "function-as-a-service", "cold start optimization",
+        "database sharding", "replication strategies", "consistency models",
+        "API rate limiting", "circuit breakers", "retry policies",
+        "observability", "distributed tracing", "log aggregation",
+        "feature flags", "A/B testing", "canary deployments",
+        "infrastructure as code", "Terraform modules", "CloudFormation templates",
     ]
 
     templates = [
@@ -47,7 +66,7 @@ def generate_sentences(n: int, seed: int = 42) -> list[str]:
         "Performance optimization for {}",
         "Security considerations in {}",
         "Comparing different approaches to {}",
-        "The future of {} in enterprise",
+        "The future of {} in enterprise software",
         "Debugging issues with {}",
         "Monitoring and observability for {}",
         "Cost optimization strategies for {}",
@@ -58,31 +77,78 @@ def generate_sentences(n: int, seed: int = 42) -> list[str]:
         "Real-world case studies in {}",
         "Open source tools for {}",
         "Interview questions about {}",
+        "Architecture patterns for {}",
+        "Testing strategies for {}",
+        "Deployment automation for {}",
+        "Error handling in {}",
+        "Configuration management for {}",
+        "Capacity planning for {}",
+        "Disaster recovery with {}",
+        "Compliance requirements for {}",
+        "Training new engineers on {}",
+        "Building internal tools for {}",
     ]
 
-    sentences = []
-    for i in range(n):
+    contexts = [
+        "in a startup environment",
+        "for enterprise teams",
+        "with limited resources",
+        "using modern tooling",
+        "in regulated industries",
+        "for high-availability systems",
+        "in multi-cloud setups",
+        "with remote teams",
+        "during rapid growth",
+        "for legacy modernization",
+        "in real-time applications",
+        "for batch processing workloads",
+        "with strict latency requirements",
+        "in data-intensive applications",
+        "for customer-facing services",
+    ]
+
+    # Generate unique sentences
+    sentences = set()
+    attempts = 0
+    max_attempts = n * 10
+
+    while len(sentences) < n and attempts < max_attempts:
         topic = topics[rng.integers(len(topics))]
         template = templates[rng.integers(len(templates))]
-        # Add some variation
-        suffix = f" (variant {i % 100})" if i > len(topics) * len(templates) else ""
-        sentences.append(template.format(topic) + suffix)
+        base = template.format(topic)
 
-    return sentences
+        # Add context and variant number for uniqueness
+        if rng.random() > 0.2:
+            context = contexts[rng.integers(len(contexts))]
+            variant = rng.integers(1, 50)
+            sentence = f"{base} {context} (part {variant})"
+        else:
+            variant = rng.integers(1, 200)
+            sentence = f"{base} — section {variant}"
+
+        sentences.add(sentence)
+        attempts += 1
+
+    result = list(sentences)
+    rng.shuffle(result)
+    return result[:n]
 
 
 def main():
     print("=" * 60)
     print("  Generating Real Sentence-Transformer Embeddings")
+    print("  (deduplicated sentences)")
     print("=" * 60)
 
     n_db = 99_000
     n_queries = 1_000
     n_total = n_db + n_queries
 
-    # Generate sentences
-    print(f"\n  Generating {n_total} sentences...")
+    # Generate unique sentences
+    print(f"\n  Generating {n_total} unique sentences...")
     sentences = generate_sentences(n_total, seed=42)
+    print(f"  Generated: {len(sentences)} unique sentences")
+    assert len(sentences) == len(set(sentences)), "Duplicates found!"
     print(f"  Sample: '{sentences[0]}'")
     print(f"  Sample: '{sentences[100]}'")
 
@@ -110,14 +176,13 @@ def main():
     print(f"    data/real_embeddings.npy  ({db_vectors.shape})")
     print(f"    data/real_queries.npy     ({query_vectors.shape})")
 
-    # Quick sanity check
+    # Sanity check
     print(f"\n  Sanity check:")
     print(f"    Norm of first vector: {np.linalg.norm(db_vectors[0]):.4f} (should be ~1.0)")
-    print(f"    Mean inner product (same topic): ", end="")
-    # Vectors 0 and 1000 should be from similar topics
     sims = db_vectors[:100] @ db_vectors[:100].T
     np.fill_diagonal(sims, 0)
-    print(f"{sims.mean():.4f}")
+    print(f"    Mean pairwise similarity (first 100): {sims.mean():.4f}")
+    print(f"    Max pairwise similarity (first 100): {sims.max():.4f}")
 
     print("\n  Done! Run: cargo run --release --bin real_embeddings_bench")
 
