@@ -10,6 +10,14 @@ license = "MIT"
 name = "bitcache"
 crate-type = ["rlib"]
 
+[[bin]]
+name = "benchmark"
+path = "benches/full_benchmark.rs"
+
+[[bin]]
+name = "quick_metrics"
+path = "benches/quick_metrics.rs"
+
 [features]
 default = []
 python = ["pyo3", "numpy"]
