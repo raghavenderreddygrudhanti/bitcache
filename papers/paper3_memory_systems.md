@@ -6,7 +6,7 @@
 
 ## Abstract
 
-We present Bitcache Memory, a composable persistent memory architecture for autonomous AI agents that integrates retrieval, mutation, prioritization, and relational reasoning under bounded resources. The system answers a central question: how should AI agents manage long-term memory when knowledge evolves continuously, not all memories are equally important, and context requires both similarity and relationships? The Rust implementation achieves production-style throughput: 423K inserts/sec, 4,887 QPS for memory retrieval, 5.6M deletes/sec, and 12,200 QPS for graph search with 2-hop expansion. Each layer is independently composable: agents may use staged retrieval alone, or combine all six layers for full memory lifecycle management.
+We present Bitcache Memory, a composable memory architecture for AI agents that integrates retrieval, mutation, prioritization, and relational reasoning under bounded resources. The system answers a central question: how should AI agents manage long-term memory when knowledge evolves continuously, not all memories are equally important, and context requires both similarity and relationships? The Rust implementation achieves throughput suitable for agent-scale workloads (10K-500K memories): 423K inserts/sec, 4,887 QPS for memory retrieval, 5.6M deletes/sec, and 12,200 QPS for graph search with 2-hop expansion. On a 1000-memory stress test with 30 knowledge changes over 180 simulated days, Bitcache achieves 83.8% retrieval accuracy compared to 25% for a standard vector database and 0% for chat history — demonstrating that importance-weighted decay and contradiction detection meaningfully improve memory quality at scale. Each layer is independently composable: agents may use staged retrieval alone, or combine all six layers for full memory lifecycle management.
 
 ---
 
@@ -184,7 +184,7 @@ To validate that the memory lifecycle mechanisms (decay, reinforcement, eviction
 **Key findings:**
 1. Chat history fails completely at 1000-memory scale (window too small).
 2. Vector DB retrieves preferences (100%) but cannot forget trivial info (0%) or handle contradictions (0%).
-3. Bitcache achieves 100% on forgetting, preferences, and confidence — and 57% on current-state tracking across 30 changes over 180 days.
+3. Bitcache achieves 100% on forgetting, preferences, and confidence — and 57% on current-state tracking across 30 changes over 180 days. The 57% reflects the limitation of keyword-based contradiction detection on varied phrasings; semantic contradiction detection (e.g., NLI models) would improve this at higher latency cost.
 4. All memory management decisions (importance scoring, contradiction detection, eviction) are made locally in microseconds with no LLM calls.
 
 ![Figure 5: Agent Memory Benchmark — Overall](figures/paper3_memory_benchmark_overall.png)
@@ -230,9 +230,10 @@ To validate that the memory lifecycle mechanisms (decay, reinforcement, eviction
 2. **Linear decay model.** Biological memory follows power-law forgetting curves (Ebbinghaus). Our linear model is a simplification that may not match optimal agent behavior.
 3. **Manual graph construction.** Entities and relations must be explicitly inserted. No automatic extraction from text is provided.
 4. **Single-process.** No multi-agent shared memory or distributed coordination.
-5. **No persistence.** Current implementation is in-memory only. Crash recovery and disk persistence are not yet implemented.
-6. **No live evaluation.** We have not measured downstream task performance (e.g., answer quality improvement from memory retrieval).
-7. **No concurrency guarantees.** The current implementation is single-threaded for mutations. Concurrent read/write requires external synchronization.
+5. **No persistence.** Current implementation is in-memory only. All memories are lost on process restart. Crash recovery and disk persistence (e.g., write-ahead logging or mmap-backed storage) are not yet implemented. This is the most significant gap for production deployment.
+6. **No live agent evaluation.** The quality benchmark (Section 4.6) uses a simulated IT support scenario, not a real LLM agent. Downstream task performance (answer quality improvement from memory) has not been measured end-to-end.
+7. **Fragile contradiction detection.** The keyword-based approach achieves 57% on current-state tracking. Varied phrasings of the same change (e.g., "switched to X" vs "X replaced Y") are not always detected. Semantic NLI models would improve this at higher latency cost.
+8. **No concurrency guarantees.** The current implementation is single-threaded for mutations. Concurrent read/write requires external synchronization.
 
 ---
 
@@ -251,7 +252,7 @@ To validate that the memory lifecycle mechanisms (decay, reinforcement, eviction
 
 Bitcache Memory provides a composable persistent memory architecture for AI agents that integrates retrieval, mutation, prioritization, and relational reasoning. The central contribution is not any single component, but the layered design that allows agents to compose memory capabilities as needed — from simple staged retrieval (Layer 2) to full lifecycle management with graph reasoning (all six layers).
 
-The Rust implementation demonstrates production-style throughput characteristics: 423K inserts/sec, 4,887 QPS for memory retrieval with decay and reinforcement, 12,200 QPS for graph search with multi-hop expansion, and 20,418 QPS for the underlying binary search engine (ARM NEON SIMD, parallel batch). Each layer is independently validated and composable.
+The Rust implementation demonstrates throughput suitable for agent-scale workloads: 423K inserts/sec, 4,887 QPS for memory retrieval with decay and reinforcement, 12,200 QPS for graph search with multi-hop expansion, and 20,418 QPS for the underlying binary search engine (ARM NEON SIMD, parallel batch). The 1000-memory quality benchmark shows 83.8% retrieval accuracy with automatic importance scoring and contradiction detection — all without LLM calls for memory management. The recall-compression tradeoff is characterized in Paper 1: binary-only achieves 0.740 recall@10, while two-stage with reranking recovers to 0.999. Each layer is independently validated and composable.
 
 FAISS remains the stronger general-purpose vector search library for static, large-scale workloads. Bitcache targets a different design point: persistent AI-agent memory where streaming mutation, bounded resources, and memory lifecycle management matter alongside retrieval quality.
 
