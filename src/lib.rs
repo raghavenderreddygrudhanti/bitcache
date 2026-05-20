@@ -18,6 +18,8 @@ pub mod float_routed;
 pub mod streaming;
 pub mod memory;
 pub mod graph_memory;
+pub mod parallel;
+pub mod forgetting;
 
 #[cfg(feature = "python")]
 mod python;
@@ -31,3 +33,4 @@ pub use float_routed::FloatRoutedIndex;
 pub use streaming::StreamingIndex;
 pub use memory::AgentMemory;
 pub use graph_memory::GraphMemory;
+pub use parallel::{ParallelIndex, ConcurrentIndex};
