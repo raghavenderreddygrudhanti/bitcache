@@ -1,0 +1,47 @@
+[
+  {
+    "system": "No Memory",
+    "accuracy": 0.0,
+    "staleness": 0.0,
+    "avg_latency_ms": 0.0008821487426757812,
+    "correct": 0,
+    "stale": 0,
+    "total": 10
+  },
+  {
+    "system": "Chat History (20)",
+    "accuracy": 0.0,
+    "staleness": 0.0,
+    "avg_latency_ms": 0.0020265579223632812,
+    "correct": 0,
+    "stale": 0,
+    "total": 10
+  },
+  {
+    "system": "Vector DB",
+    "accuracy": 0.2,
+    "staleness": 0.2,
+    "avg_latency_ms": 28.605937957763672,
+    "correct": 2,
+    "stale": 2,
+    "total": 10
+  },
+  {
+    "system": "Bitcache (cap=30)",
+    "accuracy": 0.2,
+    "staleness": 0.0,
+    "avg_latency_ms": 12.116384506225586,
+    "correct": 2,
+    "stale": 0,
+    "total": 10
+  },
+  {
+    "system": "Bitcache (cap=50)",
+    "accuracy": 0.2,
+    "staleness": 0.1,
+    "avg_latency_ms": 19.665837287902832,
+    "correct": 2,
+    "stale": 1,
+    "total": 10
+  }
+]

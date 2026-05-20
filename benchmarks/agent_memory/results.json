@@ -1,0 +1,74 @@
+[
+  {
+    "system": "No Memory",
+    "accuracy": 0.0,
+    "correct": 0,
+    "total": 15,
+    "avg_retrieve_ms": 0.00012715657552083334,
+    "avg_store_ms": 0.0005662441253662109,
+    "memory_size": 0
+  },
+  {
+    "system": "Chat History (last 10)",
+    "accuracy": 0.2,
+    "correct": 3,
+    "total": 15,
+    "avg_retrieve_ms": 0.0003814697265625,
+    "avg_store_ms": 0.0003203749656677246,
+    "memory_size": 10
+  },
+  {
+    "system": "Chat History (last 20)",
+    "accuracy": 0.2,
+    "correct": 3,
+    "total": 15,
+    "avg_retrieve_ms": 0.0002702077229817708,
+    "avg_store_ms": 0.0001862645149230957,
+    "memory_size": 20
+  },
+  {
+    "system": "Vector DB (store all)",
+    "accuracy": 0.6666666666666666,
+    "correct": 10,
+    "total": 15,
+    "avg_retrieve_ms": 35.581398010253906,
+    "avg_store_ms": 40.550507605075836,
+    "memory_size": 32
+  },
+  {
+    "system": "Bitcache (cap=50, decay=0.0)",
+    "accuracy": 0.8666666666666667,
+    "correct": 13,
+    "total": 15,
+    "avg_retrieve_ms": 8.286190032958984,
+    "avg_store_ms": 8.846074342727661,
+    "memory_size": 32
+  },
+  {
+    "system": "Bitcache (cap=50, decay=0.03)",
+    "accuracy": 0.5333333333333333,
+    "correct": 8,
+    "total": 15,
+    "avg_retrieve_ms": 8.354743321736654,
+    "avg_store_ms": 8.300267159938812,
+    "memory_size": 32
+  },
+  {
+    "system": "Bitcache (cap=20, decay=0.03)",
+    "accuracy": 0.8,
+    "correct": 12,
+    "total": 15,
+    "avg_retrieve_ms": 8.349847793579102,
+    "avg_store_ms": 8.321300148963928,
+    "memory_size": 20
+  },
+  {
+    "system": "Bitcache (cap=20, decay=0.05)",
+    "accuracy": 0.8,
+    "correct": 12,
+    "total": 15,
+    "avg_retrieve_ms": 8.036390940348307,
+    "avg_store_ms": 8.02379846572876,
+    "memory_size": 20
+  }
+]

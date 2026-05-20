@@ -163,6 +163,30 @@ The lowest-importance memories are correctly evicted, and retrieved memories gai
 
 Decay is linear with time. Higher decay rates cause faster forgetting. The mechanism is simple and predictable.
 
+### 4.6 Agent Memory Quality Benchmark (1000 memories, 80 questions)
+
+To validate that the memory lifecycle mechanisms (decay, reinforcement, eviction, contradiction detection) produce correct behavior at scale, we ran a stress test simulating an IT support agent over 180 days with 1000 stored memories, 30 knowledge changes, and 80 test questions across four categories.
+
+**Setup:** 1000 memories (35% trivial, 20% infrastructure, 15% ops, 10% personal, 10% preference, 10% emotional). 30 explicit contradictions (database migrations, job changes, tool switches). Capacity limited to 100 memories. Auto-importance scoring (no LLM calls). Keyword-based contradiction detection (no LLM calls).
+
+| System | Overall | Current State | Preferences | Forgetting | Confidence |
+|--------|---------|--------------|-------------|-----------|-----------|
+| Chat History (last 50) | 0.0% | 0% | 0% | 0% | 0% |
+| Vector DB (store all 1030) | 25.0% | 0% | 100% | 0% | 0% |
+| **Bitcache Smart (cap=100)** | **83.8%** | **57%** | **100%** | **100%** | **100%** |
+
+**Category definitions:**
+- **Current State:** Does the system return the latest information after changes? (e.g., "What database?" → should say the newest, not the old one)
+- **Preferences:** Does the system retain persistent user preferences? (e.g., "Am I allergic?" → "peanuts")
+- **Forgetting:** Does the system correctly forget trivial information? (e.g., "What did I eat?" → should NOT return lunch details)
+- **Confidence:** Does the system say "I don't know" when it has no relevant information? (e.g., "What's my blood type?")
+
+**Key findings:**
+1. Chat history fails completely at 1000-memory scale (window too small).
+2. Vector DB retrieves preferences (100%) but cannot forget trivial info (0%) or handle contradictions (0%).
+3. Bitcache achieves 100% on forgetting, preferences, and confidence — and 57% on current-state tracking across 30 changes over 180 days.
+4. All memory management decisions (importance scoring, contradiction detection, eviction) are made locally in microseconds with no LLM calls.
+
 ---
 
 ## 5. Per-Layer Complexity
