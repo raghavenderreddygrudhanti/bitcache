@@ -20,6 +20,9 @@ pub mod memory;
 pub mod graph_memory;
 pub mod parallel;
 pub mod forgetting;
+pub mod confidence;
+pub mod emotional;
+pub mod temporal;
 
 #[cfg(feature = "python")]
 mod python;
