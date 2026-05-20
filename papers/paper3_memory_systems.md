@@ -187,6 +187,12 @@ To validate that the memory lifecycle mechanisms (decay, reinforcement, eviction
 3. Bitcache achieves 100% on forgetting, preferences, and confidence — and 57% on current-state tracking across 30 changes over 180 days.
 4. All memory management decisions (importance scoring, contradiction detection, eviction) are made locally in microseconds with no LLM calls.
 
+![Figure 5: Agent Memory Benchmark — Overall](figures/paper3_memory_benchmark_overall.png)
+
+![Figure 6: Memory Quality by Category](figures/paper3_memory_benchmark_categories.png)
+
+![Figure 7: Memory Capabilities Comparison](figures/paper3_memory_capabilities.png)
+
 ---
 
 ## 5. Per-Layer Complexity
