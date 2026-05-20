@@ -12,7 +12,7 @@ We present Bitcache Memory, a composable memory architecture for AI agents that 
 
 ## 1. Introduction
 
-Autonomous AI agents require persistent memory that differs fundamentally from vector search:
+Autonomous AI agents require persistent memory that differs fundamentally from vector search. This paper presents a research prototype exploring how such memory should be structured — not a production-ready deployment, but an architecture and evaluation framework for agent memory at the 10K–500K scale:
 
 | Requirement | Vector Database | Agent Memory |
 |-------------|----------------|--------------|
@@ -165,9 +165,9 @@ Decay is linear with time. Higher decay rates cause faster forgetting. The mecha
 
 ### 4.6 Agent Memory Quality Benchmark (1000 memories, 80 questions)
 
-To validate that the memory lifecycle mechanisms (decay, reinforcement, eviction, contradiction detection) produce correct behavior at scale, we ran a stress test simulating an IT support agent over 180 days with 1000 stored memories, 30 knowledge changes, and 80 test questions across four categories.
+To validate that the memory lifecycle mechanisms (decay, reinforcement, eviction, contradiction detection) produce correct behavior at scale, we ran a **simulated** stress test modeling an IT support agent over 180 days with 1000 stored memories, 30 knowledge changes, and 80 test questions across four categories. This is a synthetic benchmark — not a live agent evaluation — designed to isolate memory system behavior from LLM variability.
 
-**Setup:** 1000 memories (35% trivial, 20% infrastructure, 15% ops, 10% personal, 10% preference, 10% emotional). 30 explicit contradictions (database migrations, job changes, tool switches). Capacity limited to 100 memories. Auto-importance scoring (no LLM calls). Keyword-based contradiction detection (no LLM calls).
+**Setup (simulated):** 1000 memories (35% trivial, 20% infrastructure, 15% ops, 10% personal, 10% preference, 10% emotional). 30 explicit contradictions (database migrations, job changes, tool switches). Capacity limited to 100 memories. Auto-importance scoring (no LLM calls). Keyword-based contradiction detection (no LLM calls).
 
 | System | Overall | Current State | Preferences | Forgetting | Confidence |
 |--------|---------|--------------|-------------|-----------|-----------|
@@ -216,7 +216,7 @@ To validate that the memory lifecycle mechanisms (decay, reinforcement, eviction
 | Streaming mutation | — | ✓ | ✓ | — | ✓ |
 | Temporal decay | — | — | ✓ | — | ✓ |
 | Reinforcement | — | — | ✓ | — | ✓ |
-| Capacity eviction | — | — | Partial | — | ✓ |
+| Capacity eviction | — | — | Partial | — | ✓ (importance-based) |
 | Graph reasoning | — | — | — | ✓ | ✓ |
 | Binary compression | Partial | — | — | — | ✓ (32x) |
 | Tunable recall | Limited | — | — | — | ✓ |
